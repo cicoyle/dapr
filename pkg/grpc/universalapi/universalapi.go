@@ -16,6 +16,7 @@ limitations under the License.
 package universalapi
 
 import (
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"sync"
 	"sync/atomic"
 
@@ -38,6 +39,7 @@ type UniversalAPI struct {
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	SchedulerClient             schedulerv1pb.SchedulerClient
 
 	extendedMetadataLock sync.RWMutex
 	actorsReady          atomic.Bool

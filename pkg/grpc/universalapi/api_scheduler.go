@@ -36,11 +36,11 @@ func (a *UniversalAPI) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Sched
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
 		Namespace: "",  //TODO
-		Metadata:  nil, //TODO: this should I think generate key if jobStateStore is configured
+		Metadata:  nil, //TODO: this should generate key if jobStateStore is configured
 	}
 
 	//TODO: do something with following response?
-	_, err = a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
+	_, err = a.SchedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.Logger.Errorf("Error Scheduling job %v", err)
 		return &emptypb.Empty{}, err
@@ -62,7 +62,7 @@ func (a *UniversalAPI) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJ
 	}
 
 	//TODO: do something with following response?
-	_, err = a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
+	_, err = a.SchedulerClient.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		a.Logger.Errorf("Error Deleting job %v", err)
 		return &emptypb.Empty{}, err
@@ -85,7 +85,7 @@ func (a *UniversalAPI) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequ
 		JobName: inReq.GetName(),
 	}
 
-	internalResp, err = a.schedulerClient.GetJob(ctx, internalGetJobReq)
+	internalResp, err = a.SchedulerClient.GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		a.Logger.Errorf("Error Getting job %v", err)
 		return response, err
@@ -110,7 +110,7 @@ func (a *UniversalAPI) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobs
 		AppId: inReq.GetAppId(),
 	}
 
-	internalListResp, err = a.schedulerClient.ListJobs(ctx, internalListReq)
+	internalListResp, err = a.SchedulerClient.ListJobs(ctx, internalListReq)
 	if err != nil {
 		a.Logger.Errorf("Error Listing jobs for app %v", err)
 		return response, err
