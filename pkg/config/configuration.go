@@ -22,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	env "github.com/dapr/dapr/pkg/config/env"
-
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	yaml "gopkg.in/yaml.v3"
@@ -31,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
@@ -41,11 +40,10 @@ import (
 type Feature string
 
 const (
-	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
-	// TODO: Remove this feature flag in Dapr 1.13.
-	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
 	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
+	// Enables support for hot reloading of Daprd Components and HTTPEndpoints.
+	HotReload Feature = "HotReload"
 )
 
 // end feature flags section
