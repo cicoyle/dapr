@@ -4,9 +4,9 @@ go 1.21
 
 require (
 	github.com/dapr/dapr v1.7.4
-	google.golang.org/grpc v1.59.0
+	google.golang.org/grpc v1.60.1
 	google.golang.org/grpc/examples v0.0.0-20220818173707-97cb7b1653d7
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.32.0
 )
 
 require (
