@@ -72,7 +72,7 @@ func (a *UniversalAPI) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJ
 }
 
 func (a *UniversalAPI) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
-	var response *runtimev1pb.GetJobResponse
+	response := &runtimev1pb.GetJobResponse{}
 	var internalResp *schedulerv1pb.GetJobResponse
 	var err error
 
@@ -88,7 +88,7 @@ func (a *UniversalAPI) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequ
 	internalResp, err = a.SchedulerClient.GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		a.Logger.Errorf("Error Getting job %v", err)
-		return response, err
+		return nil, err
 	}
 
 	response.Job = internalResp.Job
@@ -97,7 +97,10 @@ func (a *UniversalAPI) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequ
 }
 
 func (a *UniversalAPI) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
-	var response *runtimev1pb.ListJobsResponse
+	response := &runtimev1pb.ListJobsResponse{
+		Jobs: []*runtimev1pb.Job{},
+	}
+
 	var internalListResp *schedulerv1pb.ListJobsResponse
 	var err error
 
@@ -112,11 +115,11 @@ func (a *UniversalAPI) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobs
 
 	internalListResp, err = a.SchedulerClient.ListJobs(ctx, internalListReq)
 	if err != nil {
-		a.Logger.Errorf("Error Listing jobs for app %v", err)
-		return response, err
+		a.Logger.Errorf("Error Listing jobs for app %s: %v", inReq.AppId, err)
+		return nil, err
 	}
 
-	if len(internalListResp.GetJobs()) > 0 {
+	if len(internalListResp.Jobs) > 0 {
 		response.Jobs = internalListResp.Jobs
 	}
 
