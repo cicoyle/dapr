@@ -16,7 +16,11 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"net"
+	"sync"
+	"time"
 
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
@@ -29,24 +33,40 @@ import (
 )
 
 var log = logger.NewLogger("dapr.scheduler.server")
+var (
+	// TODO: adjust this
+	maxConnIdle = 20 * time.Minute
+)
 
 type Options struct {
 	// Port is the port that the server will listen on.
 	Port     int
 	Security security.Handler
+	//InternalSidecarClient internalv1pb.JobCallbackClient
+	DaprClient runtimev1pb.DaprClient
 }
 
 // Server is the gRPC server for the Scheduler service.
 type Server struct {
 	port int
 	srv  *grpc.Server
-
-	cron    *etcdcron.Cron
-	readyCh chan struct{}
+	sec  security.Handler
+	//internalClient internalv1pb.JobCallbackClient
+	daprClient runtimev1pb.DaprClient
+	//connPool *manager.ConnectionPool need more than this to be indexed by app id
+	connPools map[string]*manager.ConnectionPool // Map of connection pools indexed by app ID
+	mu        sync.RWMutex                       // acct for concurrent access to connPools
+	cron      *etcdcron.Cron
+	readyCh   chan struct{}
 }
 
 func New(opts Options) *Server {
 	s := &Server{
+		daprClient: opts.DaprClient,
+		//connPool:       manager.NewConnectionPool(maxConnIdle, 0),
+		connPools: make(map[string]*manager.ConnectionPool),
+		sec:       opts.Security,
+		//internalClient: opts.InternalSidecarClient,
 		port:    opts.Port,
 		readyCh: make(chan struct{}),
 	}
