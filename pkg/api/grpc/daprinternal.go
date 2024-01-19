@@ -356,3 +356,14 @@ func (a *api) callLocalRecordRequest(req *internalv1pb.InternalInvokeRequest) (c
 
 	return
 }
+
+// internal dapr func
+func (a *api) TriggerJobCallback(context.Context, *internalv1pb.TriggerJobRequest) (*internalv1pb.TriggerJobResponse, error) {
+	//func (a *api) TriggerJob(ctx context.Context, req *internalv1pb.TriggerJobRequest) (*internalv1pb.TriggerJobResponse, error) {
+	fmt.Println("HERE in dapr internal trigger job")
+
+	//this gets called from the scheduler server at the cron job trigger time
+	//this should call the universal trigger job func
+
+	return nil, nil
+}

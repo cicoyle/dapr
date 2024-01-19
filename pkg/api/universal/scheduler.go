@@ -27,6 +27,11 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	//validate job details, date, schedule, etc??
 	var err error
 
+	// TODO:
+	// send back err if job data is too large and can cause network congestion for raft & latency
+	// depends on load and ingress of data & network thruput
+	// probably based on perf tests determine what is too big
+
 	metadata := map[string]string{"app_id": a.AppID()}
 	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetJob().GetName())
 
@@ -98,6 +103,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	}
 
 	response.Job = internalResp.Job
+	//rm the prefix app_id from jobs before sending back to users
 
 	return response, err
 }
@@ -129,5 +135,17 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 		response.Jobs = internalListResp.Jobs
 	}
 
+	//rm the prefix app_id from jobs before sending back to users
 	return response, err
+}
+
+// User facing TriggerJob
+func (a *Universal) TriggerJob(context.Context, *runtimev1pb.TriggerJobRequest) (*runtimev1pb.TriggerJobResponse, error) {
+	fmt.Println("HERE in dapr user facing trigger job")
+
+	//gets called from dapr internal TriggerJobCallback and sends data back to app
+	// service invocation call here from sidecar -> app?
+	// is this the same manner as I used service invocation to get here?
+	// via unknowntrust domain or how do we callback to apps? -> look into
+	return nil, nil
 }

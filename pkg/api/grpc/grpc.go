@@ -77,6 +77,9 @@ type API interface {
 
 	// Methods internal to the object
 	SetActorRuntime(actor actors.ActorRuntime)
+
+	// Internal daprd sidecar methods for scheduler communication
+	internalv1pb.InternalSchedulerCallbackServer //TODO: rm Internal and name it scheduler so internal.schedulerserver
 }
 
 type api struct {

@@ -141,6 +141,8 @@ type DaprClient interface {
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// List all jobs by app
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	// TriggerJob is the callback to the app at the job trigger time
+	TriggerJob(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error)
 }
 
 type daprClient struct {
@@ -763,6 +765,15 @@ func (c *daprClient) ListJobs(ctx context.Context, in *ListJobsRequest, opts ...
 	return out, nil
 }
 
+func (c *daprClient) TriggerJob(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error) {
+	out := new(TriggerJobResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TriggerJob", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -884,6 +895,8 @@ type DaprServer interface {
 	GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	// List all jobs by app
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
+	// TriggerJob is the callback to the app at the job trigger time
+	TriggerJob(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1063,6 +1076,9 @@ func (UnimplementedDaprServer) GetJob(context.Context, *GetJobRequest) (*GetJobR
 }
 func (UnimplementedDaprServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListJobs not implemented")
+}
+func (UnimplementedDaprServer) TriggerJob(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TriggerJob not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2142,6 +2158,24 @@ func _Dapr_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_TriggerJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TriggerJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).TriggerJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/TriggerJob",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).TriggerJob(ctx, req.(*TriggerJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2364,6 +2398,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListJobs",
 			Handler:    _Dapr_ListJobs_Handler,
+		},
+		{
+			MethodName: "TriggerJob",
+			Handler:    _Dapr_TriggerJob_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -17,28 +17,25 @@ import (
 	"context"
 	"fmt"
 	etcdcron "github.com/Scalingo/go-etcd-cron"
-	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"time"
 )
 
 var (
-	appPort      = 3000
-	daprHttpPort = 3500
-	daprGrpcPort = 50001
-	dialTimeout  = 1 * time.Second
+	appPort                     = 3000
+	daprHttpPort                = 3500
+	daprGrpcPort                = 50001
+	dialTimeout                 = 1 * time.Second
+	daprSidecarInternalGRPCPort = 50002
 )
 
-func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
+type GRPCConnectionFn func(ctx context.Context, address string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 // ScheduleJob is a placeholder method that needs to be implemented
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
@@ -51,6 +48,34 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	//appID, ok := req.Metadata["appID"]
+	//if !ok {
+	//	log.Errorf("Error getting appID for job: %s", req.Job.GetName())
+	//	return nil, fmt.Errorf("appID not found for job")
+	//}
+
+	//s.connMutex.Lock()
+	//defer s.connMutex.Unlock()
+	//
+	//// Check if a connection pool already exists for this appID
+	//connPool, ok := s.connPools[appID]
+	//if !ok {
+	//	// If connection pool doesn't exist for the app ID, create one
+	//	connPool = manager.NewConnectionPool(maxConnIdle, 0)
+	//	s.connPools[appID] = connPool
+	//}
+	//
+	//// Get a connection from the pool
+	//conn, err := connPool.Get(func() (grpc.ClientConnInterface, error) {
+	//	// Create the gRPC connection to the Dapr sidecar dynamically
+	//	return grpc.Dial("localhost:50001", grpc.WithInsecure())
+	//})
+	//if err != nil {
+	//	log.Errorf("Failed to get connection from pool for appID %s: %v", appID, err)
+	//	return nil, fmt.Errorf("failed to get connection from pool: %v", err)
+	//}
+	//defer connPool.Release(conn)
+
 	//TODO: figure out if we need/want namespace in job name
 	err := s.cron.AddJob(etcdcron.Job{ //save but not execute.
 		Name:     req.Job.Name,
@@ -61,14 +86,84 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Data:     req.Job.Data,
 		Metadata: req.Metadata, //TODO: do I need this here? storing appID
 		Func: func(context.Context) error {
-			//do logic here
-			//conn here
+			log.Infof("HERE in Func. Job @ TriggerTime")
+			// do logic here
+			// conn here
+			// call to sidecar func from here using service invocation
+
+			appID, ok := req.Metadata["app_id"]
+			if !ok {
+				log.Errorf("Error getting appID for job: %s", req.Job.GetName())
+				return fmt.Errorf("appID not found for job")
+			}
+			//streaming api for scheduling??
+			namespace, ok := req.Metadata["namespace"]
+			if !ok {
+				namespace = "default"
+				req.Metadata["namespace"] = "default"
+				//log.Errorf("Error getting namespace for job: %s", req.Job.GetName())
+				//return fmt.Errorf("namespace not found for job")
+			}
+
+			daprTriggerJobReq := &internalv1pb.TriggerJobRequest{
+				Job:       req.GetJob(),
+				Namespace: req.GetNamespace(),
+				Metadata:  req.GetMetadata(),
+			}
+
+			//conn, teardown, err := GRPCConnectionFn(context.TODO, "localhost", namespace)
+			//if err != nil {
+			//	return nil, teardown, err
+			//}
+
+			connInterface, err := s.createDaprSidecarConnection(ctx, appID, namespace) //todo: confirm
+			if err != nil {
+				return fmt.Errorf("failed to establish connection to Dapr sidecar: %v", err)
+			}
+
+			conn, ok := connInterface.(*grpc.ClientConn)
+			if !ok {
+				return fmt.Errorf("unexpected type for connection, expected *grpc.ClientConn, got %T", connInterface)
+			}
+
+			defer conn.Close()
+
+			directMessaging := messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
+				AppID:     appID,
+				Namespace: namespace,
+				Port:      daprSidecarInternalGRPCPort,
+				CompStore: nil,
+				Mode:      "standalone", //metadata field
+				Channels:  nil,
+				ClientConnFn: func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
+					return conn, func(_ bool) {}, nil
+				},
+				Resolver:           nil,
+				MultiResolver:      nil,
+				MaxRequestBodySize: 0,
+				Proxy:              nil,
+				ReadBufferSize:     0,
+				Resiliency:         nil,
+			})
+
+			//copy this logic here:
+			//func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
 
 			//grpc client dapr internal call trigger job internal
-			invokeReq := invokev1.NewInvokeMethodRequest("triggerJob/"). // TODO: Confirm this
-											WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {appID}}).
-											WithDataObject(daprTriggerJobReq)
-			_, err = s.directMessaging.Invoke(ctx, appID, invokeReq)
+			//TODO: mtls???
+			//call to app grpc server that is implementing the user triggerJobcallback
+			invokeReq := invokev1.NewInvokeMethodRequest("TriggerJobCallback/"). // TODO: Confirm this
+												WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {appID}}).
+												WithDataObject(daprTriggerJobReq)
+
+			resp, err := directMessaging.Invoke(ctx, appID, invokeReq)
+			// TODO: do we care about the resp here? I think retry logic is done under the hood anyways
+			fmt.Sprintf("HERE is the response from sidecar: %s", resp)
+			if err != nil {
+				return fmt.Errorf("error invoking the sidecar for job trigger: %s", err)
+			}
+			return nil
+
 			//innerErr := s.triggerJob(req.Job, req.Namespace, req.Metadata)
 			//if innerErr != nil {
 			//	return innerErr
@@ -84,6 +179,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
+/*
 func (s *Server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map[string]string) error {
 	//confirm spin off go routine to do this triggering
 	go func() {
@@ -109,7 +205,7 @@ func (s *Server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map
 	//}
 	//return nil
 }
-
+*/
 // ListJobs is a placeholder method that needs to be implemented
 func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
 	select {
@@ -195,7 +291,7 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 }
 
 //type gRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
-
+/*
 func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
 
 	select {
@@ -239,17 +335,6 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 	// Create Direct Messaging Client
 	//do once
 	//give sechandler somewhere
-	directMessaging := messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
-		ClientConnFn: func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
-			return conn, func(_ bool) {}, nil
-		},
-	})
-
-	daprTriggerJobReq := &internalv1pb.TriggerJobRequest{
-		Job:       req.GetJob(),
-		Namespace: req.GetNamespace(),
-		Metadata:  req.GetMetadata(),
-	}
 
 	//Invoke the internal daprd sidecar TriggerJob()
 	//internalv1pb triggerJob is what to call
@@ -266,30 +351,48 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 
 	return nil, nil
 }
-
+*/
 // Create a gRPC connection to Dapr sidecar with mTLS
+//TODO: Cassie: mv namespace before appID
 func (s *Server) createDaprSidecarConnection(ctx context.Context, appID string, namespace string) (grpc.ClientConnInterface, error) {
-	//how do I know what to put for the RequireTrustDomainFromString field???
-	myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("dapr"), namespace, "default", appID) //or cluster.local???
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SpiffeID: %v", err)
-	}
+	//dont have namespace for standalone mode
+	// default in standalone mode for namespace
+	//daprID, err := spiffeid.FromSegments(s.sec.ControlPlaneTrustDomain(), "ns", s.sec.ControlPlaneNamespace(), "dapr")
+	//daprID, err := spiffeid.FromSegments(s.sec.ControlPlaneTrustDomain(), "ns", namespace, "dapr")
+	//myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("dapr"), "ns", namespace, "default", appID)
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to create SpiffeID: %v", err)
+	//}
 
 	opts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(grpcRetry.UnaryClientInterceptor()),
-		s.sec.GRPCDialOptionMTLS(myAppID), grpc.WithReturnConnectionError(), //this feels wrong: confirm
+		//grpc.WithInsecure(),
+		s.sec.GRPCDialOptionMTLSUnknownTrustDomain(namespace, appID),
+		//s.sec.GRPCDialOptionMTLS(daprID), //use unknown trust domain
+		grpc.WithReturnConnectionError(),
 	}
+
+	//TODO: enhancement later on to re-use connections
+
+	//connPool, exists := s.connPools[appID] point to grpc connections
+	//if !exists {
+	//	// If connection pool doesn't exist for the app ID, create one
+	//	connPool = manager.NewConnectionPool(maxConnIdle, 0)
+	//	s.connPools[appID] = connPool
+	//}
 
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	// Use the connection pool to get a connection
-	conn, err := s.connPools[appID].Get(func() (grpc.ClientConnInterface, error) {
-		return grpc.DialContext(
-			ctx,
-			"localhost", // Don't hardcode: Set this to the address of your Dapr sidecar I think
-			opts...,
-		)
-	})
+	//conn, err := s.connPools[appID].Get(func() (grpc.ClientConnInterface, error) {
+	return grpc.DialContext(
+		ctx,
+		//DaprInternalGRPCPort:         "50002",
+		"127.0.0.1:50002", // Don't hardcode: Set this to the internal address of the daprd sidecar I think
+		opts...,
+	)
+	//})
+	//defer connPool.Release(conn)
 
 	//conn, teardown, err := gRPCConnectionFn(context.TODO(), "localhost", appID, namespace)
 	//if err != nil {
@@ -313,8 +416,8 @@ func (s *Server) createDaprSidecarConnection(ctx context.Context, appID string, 
 	return conn, nil
 }
 
+//func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
 /*
-func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -375,10 +478,10 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 	//callback to sidecar
 
 	msg.Invoke(ctx, appID, internalClient.TriggerJob())
-
-	return nil, fmt.Errorf("not implemented")
-}
 */
+//	return nil, fmt.Errorf("not implemented")
+//
+//}
 
 //
 //func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {

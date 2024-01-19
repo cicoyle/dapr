@@ -9,7 +9,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
 
 service Scheduler {
 	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	rpc ConnectHost(ConnectHostRequest) returns (ConnectHostResponse) {}
+//	rpc ConnectHost(ConnectHostRequest) returns (ConnectHostResponse) {}
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -19,21 +19,21 @@ service Scheduler {
 	// ListJobs is used by the daprd sidecar to list jobs by app_id.
 	rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
 }
-
-message ConnectHostRequest {
-	// The id of the application (app_id).
-	string app_id = 1;
-	// The namespace.
-	string namespace = 2;
-	// The hostname of the daprd sidecar.
-	string hostname = 3;
-	// The port of the daprd sidecar.
-	int32 port = 4;
-}
-
-message ConnectHostResponse {
-	// Empty as of now
-}
+//
+//message ConnectHostRequest {
+//	// The id of the application (app_id).
+//	string app_id = 1;
+//	// The namespace.
+//	string namespace = 2;
+//	// The hostname of the daprd sidecar.
+//	string hostname = 3;
+//	// The port of the daprd sidecar.
+//	int32 port = 4;
+//}
+//
+//message ConnectHostResponse {
+//	// Empty as of now
+//}
 
 // UnregisterRequest is the message used by the daprd sidecar to unregister itself from the scheduler service.
 message UnregisterRequest {

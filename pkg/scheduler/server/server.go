@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"net"
 	"sync"
@@ -44,6 +45,7 @@ type Options struct {
 	Security security.Handler
 	//InternalSidecarClient internalv1pb.JobCallbackClient
 	DaprClient runtimev1pb.DaprClient
+	//DirectMessaging v1.DirectMessaging
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -52,10 +54,12 @@ type Server struct {
 	srv  *grpc.Server
 	sec  security.Handler
 	//internalClient internalv1pb.JobCallbackClient
-	daprClient runtimev1pb.DaprClient
+	daprClient      runtimev1pb.DaprClient
+	directMessaging v1.DirectMessaging
 	//connPool *manager.ConnectionPool need more than this to be indexed by app id
 	connPools map[string]*manager.ConnectionPool // Map of connection pools indexed by app ID
-	mu        sync.RWMutex                       // acct for concurrent access to connPools
+	connMutex sync.Mutex
+	mu        sync.RWMutex // acct for concurrent access to connPools
 	cron      *etcdcron.Cron
 	readyCh   chan struct{}
 }
@@ -63,6 +67,7 @@ type Server struct {
 func New(opts Options) *Server {
 	s := &Server{
 		daprClient: opts.DaprClient,
+		//directMessaging: opts.DirectMessaging,
 		//connPool:       manager.NewConnectionPool(maxConnIdle, 0),
 		connPools: make(map[string]*manager.ConnectionPool),
 		sec:       opts.Security,

@@ -18,84 +18,86 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// JobCallbackClient is the client API for JobCallback service.
+// InternalSchedulerCallbackClient is the client API for InternalSchedulerCallback service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type JobCallbackClient interface {
-	TriggerJob(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error)
+type InternalSchedulerCallbackClient interface {
+	// Callback RPC for job schedule being at 'trigger' time
+	TriggerJobCallback(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error)
 }
 
-type jobCallbackClient struct {
+type internalSchedulerCallbackClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewJobCallbackClient(cc grpc.ClientConnInterface) JobCallbackClient {
-	return &jobCallbackClient{cc}
+func NewInternalSchedulerCallbackClient(cc grpc.ClientConnInterface) InternalSchedulerCallbackClient {
+	return &internalSchedulerCallbackClient{cc}
 }
 
-func (c *jobCallbackClient) TriggerJob(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error) {
+func (c *internalSchedulerCallbackClient) TriggerJobCallback(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error) {
 	out := new(TriggerJobResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.internals.v1.JobCallback/TriggerJob", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.internals.v1.InternalSchedulerCallback/TriggerJobCallback", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// JobCallbackServer is the server API for JobCallback service.
-// All implementations should embed UnimplementedJobCallbackServer
+// InternalSchedulerCallbackServer is the server API for InternalSchedulerCallback service.
+// All implementations should embed UnimplementedInternalSchedulerCallbackServer
 // for forward compatibility
-type JobCallbackServer interface {
-	TriggerJob(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error)
+type InternalSchedulerCallbackServer interface {
+	// Callback RPC for job schedule being at 'trigger' time
+	TriggerJobCallback(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error)
 }
 
-// UnimplementedJobCallbackServer should be embedded to have forward compatible implementations.
-type UnimplementedJobCallbackServer struct {
+// UnimplementedInternalSchedulerCallbackServer should be embedded to have forward compatible implementations.
+type UnimplementedInternalSchedulerCallbackServer struct {
 }
 
-func (UnimplementedJobCallbackServer) TriggerJob(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TriggerJob not implemented")
+func (UnimplementedInternalSchedulerCallbackServer) TriggerJobCallback(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TriggerJobCallback not implemented")
 }
 
-// UnsafeJobCallbackServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to JobCallbackServer will
+// UnsafeInternalSchedulerCallbackServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to InternalSchedulerCallbackServer will
 // result in compilation errors.
-type UnsafeJobCallbackServer interface {
-	mustEmbedUnimplementedJobCallbackServer()
+type UnsafeInternalSchedulerCallbackServer interface {
+	mustEmbedUnimplementedInternalSchedulerCallbackServer()
 }
 
-func RegisterJobCallbackServer(s grpc.ServiceRegistrar, srv JobCallbackServer) {
-	s.RegisterService(&JobCallback_ServiceDesc, srv)
+func RegisterInternalSchedulerCallbackServer(s grpc.ServiceRegistrar, srv InternalSchedulerCallbackServer) {
+	s.RegisterService(&InternalSchedulerCallback_ServiceDesc, srv)
 }
 
-func _JobCallback_TriggerJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _InternalSchedulerCallback_TriggerJobCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TriggerJobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(JobCallbackServer).TriggerJob(ctx, in)
+		return srv.(InternalSchedulerCallbackServer).TriggerJobCallback(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.internals.v1.JobCallback/TriggerJob",
+		FullMethod: "/dapr.proto.internals.v1.InternalSchedulerCallback/TriggerJobCallback",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(JobCallbackServer).TriggerJob(ctx, req.(*TriggerJobRequest))
+		return srv.(InternalSchedulerCallbackServer).TriggerJobCallback(ctx, req.(*TriggerJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// JobCallback_ServiceDesc is the grpc.ServiceDesc for JobCallback service.
+// InternalSchedulerCallback_ServiceDesc is the grpc.ServiceDesc for InternalSchedulerCallback service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var JobCallback_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "dapr.proto.internals.v1.JobCallback",
-	HandlerType: (*JobCallbackServer)(nil),
+var InternalSchedulerCallback_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.internals.v1.InternalSchedulerCallback",
+	HandlerType: (*InternalSchedulerCallbackServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "TriggerJob",
-			Handler:    _JobCallback_TriggerJob_Handler,
+			MethodName: "TriggerJobCallback",
+			Handler:    _InternalSchedulerCallback_TriggerJobCallback_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
