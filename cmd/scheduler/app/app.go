@@ -83,6 +83,7 @@ func Run() {
 
 			server := server.New(server.Options{
 				AppID:            appID,
+				DataDir:          opts.ETCDDataDir,
 				HostAddress:      hostAddress,
 				Port:             opts.Port,
 				Security:         secHandler,

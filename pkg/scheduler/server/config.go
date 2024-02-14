@@ -33,10 +33,11 @@ func parseEtcdUrls(strs []string) ([]url.URL, error) {
 	return urls, nil
 }
 
-func conf() *embed.Config {
+func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
 	config.Name = "localhost"
-	//config.Dir = "/tmp/embedded-ectd-cluster"
+	config.Dir = s.dataDir
+	// TODO: pass value from CLI flag
 	// config.LPUrls = parseEtcdUrls([]string{"http://0.0.0.0:2380"})
 	// config.LCUrls = parseEtcdUrls([]string{"http://0.0.0.0:2379"})
 	// config.APUrls = parseEtcdUrls([]string{"http://localhost:2380"})

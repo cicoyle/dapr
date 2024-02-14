@@ -76,6 +76,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: data-dir
+            mountPath: /run/data/dapr-scheduler
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
@@ -189,6 +191,8 @@ spec:
         {{- end }}
       serviceAccountName: dapr-scheduler
       volumes:
+      - name: data-dir
+        emptyDir: {}
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle

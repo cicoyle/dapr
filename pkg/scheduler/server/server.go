@@ -45,6 +45,7 @@ type Options struct {
 	HostAddress string
 	Port        int
 	Mode        modes.DaprMode
+	DataDir     string
 
 	Security security.Handler
 
@@ -53,8 +54,9 @@ type Options struct {
 
 // Server is the gRPC server for the Scheduler service.
 type Server struct {
-	port int
-	srv  *grpc.Server
+	port    int
+	dataDir string
+	srv     *grpc.Server
 
 	cron    *etcdcron.Cron
 	readyCh chan struct{}
@@ -66,6 +68,7 @@ type Server struct {
 func New(opts Options) *Server {
 	s := &Server{
 		port:    opts.Port,
+		dataDir: opts.DataDir,
 		readyCh: make(chan struct{}),
 	}
 
@@ -151,7 +154,7 @@ func (s *Server) runServer(ctx context.Context) error {
 func (s *Server) runEtcd(ctx context.Context) error {
 	log.Info("Starting etcd")
 
-	etcd, err := embed.StartEtcd(conf())
+	etcd, err := embed.StartEtcd(s.conf())
 	if err != nil {
 		return err
 	}
