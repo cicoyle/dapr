@@ -43,6 +43,7 @@ type Options struct {
 	TrustAnchorsFile string
 	SentryAddress    string
 	PlacementAddress string
+	ETCDDataDir      string
 	Mode             string
 
 	Logger  logger.Options
@@ -60,6 +61,7 @@ func New() *Options {
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	flag.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
+	flag.StringVar(&opts.ETCDDataDir, "etcd-data-dir", "/run/data/dapr-scheduler", "Directory to store scheduler etcd data")
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 
 	opts.Logger = logger.DefaultOptions()
