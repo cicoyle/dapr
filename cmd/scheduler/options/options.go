@@ -30,7 +30,7 @@ const (
 
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
-	defaultHealthzPort          = 7070
+	defaultHealthzPort          = 8080
 	defaultPort                 = 50006
 )
 
