@@ -28,9 +28,8 @@ scaleZero: false
 ha: false
 
 cluster:
-  forceInMemoryLog: false
-  logStorePath: /var/run/dapr/raft-log
-  logStoreWinPath: C:\\raft-log
+  ETCDDataDirPath: /var/run/data/dapr-scheduler
+  ETCDDataDirWinPath: C:\\etcd-data-dir
 
 volumeclaims:
   storageSize: 1Gi
