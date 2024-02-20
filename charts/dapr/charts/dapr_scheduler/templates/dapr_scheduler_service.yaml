@@ -21,7 +21,7 @@ spec:
   ports:
   - name: api
     port: {{ .Values.ports.apiPort }}
-  - name: raft-node
+  - name: embedded-etcd
     port: {{ .Values.ports.etcdRPCPort }}
-  clusterIP: None
+  clusterIP: None # make the service headless
 {{- end }}
