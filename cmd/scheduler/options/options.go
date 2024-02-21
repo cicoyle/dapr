@@ -43,7 +43,7 @@ type Options struct {
 func New() *Options {
 	var opts Options
 
-	flag.IntVar(&opts.Port, "port", 50005, "The port for the scheduler server to listen on")
+	flag.IntVar(&opts.Port, "port", 50006, "The port for the scheduler server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
