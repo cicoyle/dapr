@@ -97,6 +97,7 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
 	if s.actorPlacement != nil {
+		log.Info("Starting Actor Placement")
 		s.actorPlacement.Start(ctx)
 	}
 	return concurrency.NewRunnerManager(

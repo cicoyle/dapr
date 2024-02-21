@@ -28,6 +28,8 @@ import (
 	"sync"
 	"time"
 
+	schedulerCli "github.com/dapr/dapr/pkg/scheduler/client"
+
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -74,7 +76,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	schedulerCli "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -192,23 +193,23 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:             runtimeConfig.id,
-		Namespace:      namespace,
-		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
+		ID:               runtimeConfig.id,
+		Namespace:        namespace,
+		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
 		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
-		Registry:       runtimeConfig.registry,
-		ComponentStore: compStore,
-		Meta:           meta,
-		GlobalConfig:   globalConfig,
-		Resiliency:     resiliencyProvider,
-		Mode:           runtimeConfig.mode,
-		PodName:        podName,
-		Standalone:     runtimeConfig.standalone,
-		OperatorClient: operatorClient,
-		GRPC:           grpc,
-		Channels:       channels,
-		MiddlewareHTTP: httpMiddleware,
+		Registry:         runtimeConfig.registry,
+		ComponentStore:   compStore,
+		Meta:             meta,
+		GlobalConfig:     globalConfig,
+		Resiliency:       resiliencyProvider,
+		Mode:             runtimeConfig.mode,
+		PodName:          podName,
+		Standalone:       runtimeConfig.standalone,
+		OperatorClient:   operatorClient,
+		GRPC:             grpc,
+		Channels:         channels,
+		MiddlewareHTTP:   httpMiddleware,
 	})
 
 	var reloader *hotreload.Reloader
@@ -393,13 +394,18 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 }
 
 func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
-	// TODO: make dynamic, not index 0
-	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.schedulerAddresses[0], sec)
+	servers := schedulerCli.AddDNSResolverPrefix(cfg.schedulerAddresses)
+	schedClient, err := schedulerCli.NewSchedulerClient(schedulerCli.GetGrpcOptsGetter(servers, sec))
 	if err != nil {
 		return nil, fmt.Errorf("error creating scheduler client: %w", err)
 	}
 
-	return schedClient, nil
+	// TODO: make dynamic, not index 0
+	if err := schedClient.ConnectToServer(ctx, servers[0]); err != nil {
+		return nil, fmt.Errorf("error connecting to scheduler server: %w", err)
+	}
+
+	return schedClient.Client, nil
 }
 
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
