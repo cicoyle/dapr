@@ -1,4 +1,4 @@
-{{- if or (eq .Values.global.scheduler.enabled true) (eq .Values.global.reminders.serviceName "scheduler") }}
+{{- if (eq .Values.global.scheduler.enabled true) }}
 kind: Service
 apiVersion: v1
 metadata:

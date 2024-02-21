@@ -1,4 +1,4 @@
-{{- if or (eq .Values.global.scheduler.enabled true) (eq .Values.global.reminders.serviceName "scheduler") }}
+{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -118,7 +118,6 @@ spec:
         - "--accept-multiclient"
         - "--headless=true"
         - "--log"
-        - "--api-version=2"
         - "exec"
         - "/scheduler"
         - "--"
