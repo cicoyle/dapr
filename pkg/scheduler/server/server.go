@@ -115,6 +115,7 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
 	if s.actorRuntime != nil {
+		log.Info("Initializing actor runtime")
 		err := s.actorRuntime.Init(ctx)
 		if err != nil {
 			return err
