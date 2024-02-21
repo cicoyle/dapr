@@ -15,10 +15,8 @@ package scheduler
 
 import "github.com/dapr/dapr/tests/integration/framework/process/exec"
 
-// Option is a function that configures the process.
 type Option func(*options)
 
-// options contains the options for running the Scheduler in integration tests.
 type options struct {
 	execOpts []exec.Option
 
