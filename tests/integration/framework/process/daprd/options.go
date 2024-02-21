@@ -42,7 +42,6 @@ type options struct {
 	resourceDirs            []string
 	configs                 []string
 	placementAddresses      []string
-	schedulerAddresses      []string
 	logLevel                string
 	mode                    string
 	enableMTLS              bool
@@ -51,6 +50,7 @@ type options struct {
 	disableK8sSecretStore   *bool
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
+	schedulerAddress        *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -182,9 +182,9 @@ func WithPlacementAddresses(addresses ...string) Option {
 	}
 }
 
-func WithSchedulerAddresses(addresses ...string) Option {
+func WithSchedulerAddress(address string) Option {
 	return func(o *options) {
-		o.schedulerAddresses = addresses
+		o.schedulerAddress = &address
 	}
 }
 

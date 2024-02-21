@@ -60,7 +60,7 @@ type Options struct {
 	DaprBlockShutdownDuration    *time.Duration
 	ActorsService                string
 	RemindersService             string
-	SchedulerServiceHostAddr     string
+	SchedulerAddress             *string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -75,6 +75,8 @@ type Options struct {
 	AppChannelAddress            string
 	Logger                       logger.Options
 	Metrics                      *metrics.Options
+
+	schedulerAddressFlag string
 }
 
 func New(origArgs []string) *Options {
@@ -120,7 +122,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
-	fs.StringVar(&opts.SchedulerServiceHostAddr, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers")
+	fs.StringVar(&opts.schedulerAddressFlag, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers.")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
@@ -190,6 +192,10 @@ func New(origArgs []string) *Options {
 
 	if !fs.Changed("dapr-block-shutdown-duration") {
 		opts.DaprBlockShutdownDuration = nil
+	}
+
+	if fs.Changed("scheduler-host-address") {
+		opts.SchedulerAddress = &opts.schedulerAddressFlag
 	}
 
 	return &opts

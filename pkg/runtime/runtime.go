@@ -28,8 +28,6 @@ import (
 	"sync"
 	"time"
 
-	schedulerCli "github.com/dapr/dapr/pkg/scheduler/client"
-
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -76,6 +74,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -161,9 +160,9 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedClient schedulerv1pb.SchedulerClient
 	if runtimeConfig.SchedulerEnabled() {
-		schedClient, err = getSchedulerClient(ctx, sec, runtimeConfig)
+		schedClient, err = schedulerclient.New(ctx, *runtimeConfig.schedulerAddress, sec)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error creating scheduler client: %w", err)
 		}
 
 		log.Infof("Scheduler client initialized")
@@ -197,7 +196,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:        namespace,
 		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
+		SchedulerEnabled: runtimeConfig.schedulerAddress != nil,
 		Registry:         runtimeConfig.registry,
 		ComponentStore:   compStore,
 		Meta:             meta,
@@ -391,21 +390,6 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 	}
 
 	return client, nil
-}
-
-func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
-	servers := schedulerCli.AddDNSResolverPrefix(cfg.schedulerAddresses)
-	schedClient, err := schedulerCli.NewSchedulerClient(schedulerCli.GetGrpcOptsGetter(servers, sec))
-	if err != nil {
-		return nil, fmt.Errorf("error creating scheduler client: %w", err)
-	}
-
-	// TODO: make dynamic, not index 0
-	if err := schedClient.ConnectToServer(ctx, servers[0]); err != nil {
-		return nil, fmt.Errorf("error connecting to scheduler server: %w", err)
-	}
-
-	return schedClient.Client, nil
 }
 
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,

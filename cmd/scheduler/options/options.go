@@ -24,16 +24,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const (
-	//nolint:gosec
-	defaultCredentialsPath = "/var/run/secrets/dapr.io/credentials"
-
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
-	defaultDaprSystemConfigName = "daprsystem"
-	defaultHealthzPort          = 8080
-	defaultPort                 = 50006
-)
-
 type Options struct {
 	Port        int
 	HealthzPort int
@@ -53,8 +43,8 @@ type Options struct {
 func New() *Options {
 	var opts Options
 
-	flag.IntVar(&opts.Port, "port", defaultPort, "The port for the scheduler server to listen on")
-	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "The port for the healthz server to listen on")
+	flag.IntVar(&opts.Port, "port", 50005, "The port for the scheduler server to listen on")
+	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
