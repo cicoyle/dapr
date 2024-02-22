@@ -41,11 +41,12 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID       string
-	HostAddress string
-	Port        int
+	AppID         string
+	HostAddress   string
+	ListenAddress string
+	DataDir       string
 	Mode        modes.DaprMode
-	DataDir     string
+	Port        int
 
 	Security security.Handler
 
@@ -54,9 +55,10 @@ type Options struct {
 
 // Server is the gRPC server for the Scheduler service.
 type Server struct {
-	port    int
-	dataDir string
-	srv     *grpc.Server
+	port          int
+	listenAddress string
+	dataDir       string
+	srv           *grpc.Server
 
 	cron    *etcdcron.Cron
 	readyCh chan struct{}
@@ -67,9 +69,10 @@ type Server struct {
 
 func New(opts Options) *Server {
 	s := &Server{
-		port:    opts.Port,
-		dataDir: opts.DataDir,
-		readyCh: make(chan struct{}),
+		port:          opts.Port,
+		listenAddress: opts.ListenAddress,
+		dataDir:       opts.DataDir,
+		readyCh:       make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
@@ -128,15 +131,27 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) runServer(ctx context.Context) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
-	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+	var listener net.Listener
+	var err error
+
+	if s.listenAddress != "" {
+		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
+		if err != nil {
+			return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+		}
+		log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)
+	} else {
+		listener, err = net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+		if err != nil {
+			return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+		}
+		log.Infof("Dapr Scheduler listening on port :%d", s.port)
 	}
 
 	errCh := make(chan error)
 	go func() {
 		log.Infof("Running gRPC server on port %d", s.port)
-		if nerr := s.srv.Serve(lis); nerr != nil {
+		if nerr := s.srv.Serve(listener); nerr != nil {
 			errCh <- fmt.Errorf("failed to serve: %w", nerr)
 			return
 		}

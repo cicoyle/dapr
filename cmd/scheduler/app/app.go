@@ -85,6 +85,7 @@ func Run() {
 				AppID:            appID,
 				DataDir:          opts.ETCDDataDir,
 				HostAddress:      hostAddress,
+				ListenAddress:    opts.ListenAddress,
 				Port:             opts.Port,
 				Security:         secHandler,
 				PlacementAddress: opts.PlacementAddress,
