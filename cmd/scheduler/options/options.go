@@ -16,7 +16,6 @@ package options
 import (
 	"flag"
 	"fmt"
-
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
@@ -38,6 +37,7 @@ type Options struct {
 	Port        int
 	HealthzPort int
 
+	ListenAddress    string
 	TLSEnabled       bool
 	TrustDomain      string
 	TrustAnchorsFile string
@@ -55,6 +55,7 @@ func New() *Options {
 	flag.IntVar(&opts.Port, "port", defaultPort, "The port for the scheduler server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "The port for the healthz server to listen on")
 
+	flag.StringVar(&opts.ListenAddress, "listen-address", "", "The address for the Scheduler to listen on")
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")

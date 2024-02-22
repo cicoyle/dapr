@@ -84,6 +84,7 @@ func Run() {
 			server := server.New(server.Options{
 				AppID:            appID,
 				HostAddress:      hostAddress,
+				ListenAddress:    opts.ListenAddress,
 				Port:             opts.Port,
 				Security:         secHandler,
 				PlacementAddress: opts.PlacementAddress,
