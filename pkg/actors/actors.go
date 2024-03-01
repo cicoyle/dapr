@@ -28,6 +28,8 @@ import (
 
 	"github.com/alphadose/haxmap"
 	"github.com/cenkalti/backoff/v4"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -57,8 +59,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -117,7 +117,6 @@ type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          placement.PlacementService
 	scheduler          schedulerv1pb.SchedulerClient
-	clientConn         *grpc.ClientConn
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
@@ -230,15 +229,13 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
 	if opts.Config.SchedulerService != "" {
-		log.Info("Using scheduler service for reminders.")
+		log.Info("Using Scheduler service for reminders.")
 		// TODO: have a wrapper that includes both client and conn.
-		schedulerClient, schedulerConn, err := schedulerclient.GetSchedulerClient(context.TODO(), opts.Config.SchedulerService, opts.Security)
+		schedulerClient, err := schedulerclient.New(context.TODO(), opts.Config.SchedulerService, opts.Security)
 		if err != nil {
 			return nil, err
 		}
-
 		a.scheduler = schedulerClient
-		a.clientConn = schedulerConn
 	}
 
 	return a, nil
