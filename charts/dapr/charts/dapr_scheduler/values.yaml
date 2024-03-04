@@ -24,12 +24,11 @@ ports:
   apiPort: 50006
   etcdRPCPort: 2379
 
-scaleZero: false
-ha: false
+replicaCount: 1
 
 cluster:
-  ETCDDataDirPath: /var/run/data/dapr-scheduler
-  ETCDDataDirWinPath: C:\\etcd-data-dir
+  EtcdDataDirPath: /var/run/data/dapr-scheduler/etcd-data-dir
+  EtcdDataDirWinPath: C:\\etcd-data-dir
 
 volumeclaims:
   storageSize: 1Gi

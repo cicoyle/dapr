@@ -10,13 +10,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-{{- if eq .Values.scaleZero true }}
-  replicas: 0
-{{- else if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  replicas: 3
-{{- else }}
-  replicas: 1
-{{- end }}
+  replicas: {{ .Values.replicaCount }}
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
   selector:
@@ -77,7 +71,7 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: data-dir
-            mountPath: {{ .Values.cluster.ETCDDataDirPath }}
+            mountPath: {{ .Values.cluster.EtcdDataDirPath }}
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
@@ -88,12 +82,12 @@ spec:
         {{- with .Values.global.extraVolumeMounts.scheduler }}
           {{- toYaml . | nindent 10 }}
         {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+{{- if or (eq .Values.global.ha.enabled true) (gt (int .Values.replicaCount) 1) }}
           - name: etcd-data
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
-            mountPath: {{ .Values.cluster.ETCDDataDirWinPath }}
+            mountPath: {{ .Values.cluster.EtcdDataDirWinPath }}
     {{- else }}
-            mountPath: {{ .Values.cluster.ETCDDataDirPath }}
+            mountPath: {{ .Values.cluster.EtcdDataDirPath }}
     {{- end }}
 {{- end }}
         ports:
@@ -122,7 +116,7 @@ spec:
         - "/scheduler"
         - "--"
 {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+{{- if or (eq .Values.global.ha.enabled true) (gt (int .Values.replicaCount) 1) }}
         - "--id"
         - "$(SCHEDULER_ID)"
         - "--initial-cluster"
@@ -140,7 +134,7 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
-        - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.ETCDDataDirWinPath }}\\cluster-v2-$(SCHEDULER_ID){{- else }}{{ .Values.cluster.ETCDDataDirPath }}/cluster-v2-$(SCHEDULER_ID)"
+        - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.EtcdDataDirWinPath }}\\cluster-v2-$(SCHEDULER_ID){{- else }}{{ .Values.cluster.EtcdDataDirPath }}/cluster-v2-$(SCHEDULER_ID)"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
@@ -235,7 +229,7 @@ spec:
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+{{- if or (eq .Values.global.ha.enabled true) (gt (int .Values.replicaCount) 1) }}
   volumeClaimTemplates:
   - metadata:
       name: etcd-data
