@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/dapr/dapr/cmd/scheduler/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
@@ -36,7 +37,7 @@ var log = logger.NewLogger("dapr.scheduler")
 const appID = "dapr-scheduler"
 
 func Run() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
@@ -82,8 +83,15 @@ func Run() {
 			}
 
 			server := server.New(server.Options{
-				AppID:            appID,
-				DataDir:          opts.EtcdDataDir,
+				AppID:                   appID,
+				DataDir:                 opts.EtcdDataDir,
+				EtcdID:                  opts.EtcdID,
+				EtcdInitialPeers:        opts.EtcdInitialPeers,
+				EtcdAdvertisePeersURLs:  opts.EtcdAdvertisePeersURLs,
+				EtcdAdvertiseClientURLs: opts.EtcdAdvertiseClientURLs,
+				EtcdListenClientURLs:    opts.EtcdListenClientURLs,
+				EtcdListenPeerURLs:      opts.EtcdListenPeerURLs,
+
 				HostAddress:      hostAddress,
 				ListenAddress:    opts.ListenAddress,
 				Port:             opts.Port,

@@ -14,37 +14,33 @@ limitations under the License.
 package server
 
 import (
-	"fmt"
-	"net/url"
-
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
-func parseEtcdUrls(strs []string) ([]url.URL, error) {
-	urls := make([]url.URL, 0, len(strs))
-	for _, str := range strs {
-		u, err := url.Parse(str)
-		if err != nil {
-			return nil, fmt.Errorf("invalid url %s: %s", str, err)
-		}
-		urls = append(urls, *u)
-	}
-
-	return urls, nil
-}
-
 func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
-	config.Name = "localhost"
+
+	log.Debugf("\nCASSIE: SERVER config: %+v\n\n", s)
+	//config.Name = "localhost"
+	config.Name = s.etcdID //trying
+
 	config.Dir = s.dataDir
+	config.AdvertisePeerUrls = s.etcdAdvertisePeersURLs
+	config.AdvertiseClientUrls = s.etcdAdvertiseClientURLs
+	config.ListenClientUrls = s.etcdListenClientURLs
+	config.ListenPeerUrls = s.etcdListenPeerURLs
+	// AdvertisePeerUrls
 	// TODO: pass value from CLI flag
 	// config.LPUrls = parseEtcdUrls([]string{"http://0.0.0.0:2380"})
 	// config.LCUrls = parseEtcdUrls([]string{"http://0.0.0.0:2379"})
 	// config.APUrls = parseEtcdUrls([]string{"http://localhost:2380"})
 	// config.ACUrls = parseEtcdUrls([]string{"http://localhost:2379"})
-	config.InitialCluster = "localhost=http://localhost:2380"
+	//config.InitialCluster = "localhost=http://localhost:2380"
+	config.InitialCluster = s.etcdInitialPeers
 
-	config.LogLevel = "error" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	config.LogLevel = "debug" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	log.Debugf("\nCASSIE: ETCD config: %+v\n\n", config)
+
 	// TODO: Look into etcd config and if we need to do any raft compacting
 	return config
 }

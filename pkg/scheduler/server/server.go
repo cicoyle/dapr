@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"sync/atomic"
 	"time"
@@ -41,27 +42,38 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID         string
-	HostAddress   string
-	ListenAddress string
-	DataDir       string
-	Mode        modes.DaprMode
-	Port        int
-
-	Security security.Handler
-
+	AppID            string
+	HostAddress      string
+	ListenAddress    string
 	PlacementAddress string
+	Mode             modes.DaprMode
+	Port             int
+	Security         security.Handler
+
+	DataDir                 string
+	EtcdID                  string
+	EtcdInitialPeers        string
+	EtcdAdvertisePeersURLs  []url.URL
+	EtcdAdvertiseClientURLs []url.URL
+	EtcdListenClientURLs    []url.URL
+	EtcdListenPeerURLs      []url.URL
 }
 
 // Server is the gRPC server for the Scheduler service.
 type Server struct {
 	port          int
 	listenAddress string
-	dataDir       string
 	srv           *grpc.Server
 
-	cron    *etcdcron.Cron
-	readyCh chan struct{}
+	cron                    *etcdcron.Cron
+	dataDir                 string
+	etcdID                  string
+	etcdInitialPeers        string
+	etcdAdvertisePeersURLs  []url.URL
+	etcdAdvertiseClientURLs []url.URL
+	etcdListenClientURLs    []url.URL
+	etcdListenPeerURLs      []url.URL
+	readyCh                 chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
@@ -71,8 +83,15 @@ func New(opts Options) *Server {
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
-		dataDir:       opts.DataDir,
-		readyCh:       make(chan struct{}),
+
+		dataDir:                 opts.DataDir,
+		etcdID:                  opts.EtcdID,
+		etcdInitialPeers:        opts.EtcdInitialPeers,
+		etcdAdvertisePeersURLs:  opts.EtcdAdvertisePeersURLs,
+		etcdAdvertiseClientURLs: opts.EtcdAdvertiseClientURLs,
+		etcdListenClientURLs:    opts.EtcdListenClientURLs,
+		etcdListenPeerURLs:      opts.EtcdListenPeerURLs,
+		readyCh:                 make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())

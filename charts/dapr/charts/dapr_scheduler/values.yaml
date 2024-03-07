@@ -22,7 +22,8 @@ service:
 ports:
   protocol: TCP
   apiPort: 50006
-  etcdRPCPort: 2379
+  etcdRPCClientPort: 2379
+  etcdRPCPeerPort: 2380
 
 replicaCount: 1
 
