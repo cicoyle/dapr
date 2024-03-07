@@ -18,7 +18,7 @@ const (
 	dialTimeout = 1 * time.Second
 )
 
-// GetSchedulerClient returns a new scheduler client and the underlying connection.
+// New returns a new scheduler client and the underlying connection.
 func New(ctx context.Context, address string, sec security.Handler) (schedulerv1pb.SchedulerClient, error) {
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
