@@ -196,7 +196,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:        namespace,
 		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
+		SchedulerEnabled: runtimeConfig.schedulerAddress != nil,
 		Registry:         runtimeConfig.registry,
 		ComponentStore:   compStore,
 		Meta:             meta,
@@ -392,7 +392,7 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 
 func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
 	// TODO: make dynamic, not index 0
-	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.schedulerAddresses[0], sec)
+	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, *cfg.schedulerAddress, sec)
 	if err != nil {
 		return nil, fmt.Errorf("error creating scheduler client: %w", err)
 	}
