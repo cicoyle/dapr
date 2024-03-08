@@ -28,8 +28,6 @@ import (
 
 	"github.com/alphadose/haxmap"
 	"github.com/cenkalti/backoff/v4"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -59,6 +57,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -235,6 +235,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		if err != nil {
 			return nil, err
 		}
+
 		a.scheduler = schedulerClient
 	}
 
