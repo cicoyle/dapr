@@ -45,8 +45,8 @@ type Options struct {
 	HostAddress   string
 	ListenAddress string
 	DataDir       string
-	Mode        modes.DaprMode
-	Port        int
+	Mode          modes.DaprMode
+	Port          int
 
 	Security security.Handler
 
@@ -56,9 +56,9 @@ type Options struct {
 // Server is the gRPC server for the Scheduler service.
 type Server struct {
 	port          int
+	srv           *grpc.Server
 	listenAddress string
 	dataDir       string
-	srv           *grpc.Server
 
 	cron    *etcdcron.Cron
 	readyCh chan struct{}

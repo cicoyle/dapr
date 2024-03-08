@@ -27,6 +27,7 @@ type options struct {
 	tlsEnabled       bool
 	sentryAddress    *string
 	trustAnchorsFile *string
+	listenAddress    *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -74,5 +75,11 @@ func WithSentryAddress(sentryAddress string) Option {
 func WithTrustAnchorsFile(file string) Option {
 	return func(o *options) {
 		o.trustAnchorsFile = &file
+	}
+}
+
+func WithListenAddress(address string) Option {
+	return func(o *options) {
+		o.listenAddress = &address
 	}
 }

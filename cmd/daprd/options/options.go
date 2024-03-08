@@ -134,7 +134,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
-	fs.StringVar(&opts.schedulerAddressFlag, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers.")
+	fs.StringVar(&opts.schedulerAddressFlag, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
