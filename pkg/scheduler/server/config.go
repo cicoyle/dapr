@@ -46,11 +46,10 @@ func (s *Server) conf() *embed.Config {
 		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
 
-	var etcdIP string
 	switch s.mode {
 	// can't use domain name for k8s for config.ListenPeerUrls && config.ListenClientUrls
 	case modes.KubernetesMode:
-		etcdIP = "0.0.0.0"
+		etcdIP := "0.0.0.0"
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdIP, peerPort),
