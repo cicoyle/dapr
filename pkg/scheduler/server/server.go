@@ -17,10 +17,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
@@ -41,12 +44,15 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID         string
-	HostAddress   string
-	ListenAddress string
-	DataDir       string
-	Mode          modes.DaprMode
-	Port          int
+	AppID            string
+	HostAddress      string
+	ListenAddress    string
+	DataDir          string
+	EtcdID           string
+	EtcdInitialPeers []string
+	EtcdClientPorts  []string
+	Mode             modes.DaprMode
+	Port             int
 
 	Security security.Handler
 
@@ -58,21 +64,40 @@ type Server struct {
 	port          int
 	srv           *grpc.Server
 	listenAddress string
-	dataDir       string
 
-	cron    *etcdcron.Cron
-	readyCh chan struct{}
+	dataDir          string
+	etcdID           string
+	etcdInitialPeers []string
+	etcdClientPorts  map[string]string
+	cron             *etcdcron.Cron
+	readyCh          chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
 }
 
 func New(opts Options) *Server {
+	clientPorts := make(map[string]string)
+	for _, input := range opts.EtcdClientPorts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			log.Warnf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
+			continue
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		clientPorts[schedulerID] = port
+	}
+
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
-		dataDir:       opts.DataDir,
-		readyCh:       make(chan struct{}),
+
+		etcdID:           opts.EtcdID,
+		etcdInitialPeers: opts.EtcdInitialPeers,
+		etcdClientPorts:  clientPorts,
+		dataDir:          opts.DataDir,
+		readyCh:          make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
@@ -184,7 +209,16 @@ func (s *Server) runEtcd(ctx context.Context) error {
 	}
 
 	log.Info("Starting EtcdCron")
-	cron, err := etcdcron.New()
+
+	etcdEndpoints := clientEndpoints(s.etcdInitialPeers, s.etcdClientPorts)
+
+	c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: etcdEndpoints})
+	if err != nil {
+		return err
+	}
+
+	// pass in initial cluster endpoints, but with client ports
+	cron, err := etcdcron.New(etcdcron.WithEtcdMutexBuilder(c))
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
@@ -202,4 +236,34 @@ func (s *Server) runEtcd(ctx context.Context) error {
 		log.Info("Embedded Etcd shutting down")
 		return nil
 	}
+}
+
+func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []string {
+	clientEndpoints := make([]string, 0)
+	for _, scheduler := range initialPeersListIP {
+		idAndAddress := strings.Split(scheduler, "=")
+		if len(idAndAddress) != 2 {
+			log.Warnf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
+		id := strings.TrimSpace(idAndAddress[0])
+		clientPort, ok := idToPort[id]
+		if !ok {
+			log.Warnf("Unable to find port from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
+		address := strings.TrimSpace(idAndAddress[1])
+		u, err := url.Parse(address)
+		if err != nil {
+			log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
+		updatedURL := fmt.Sprintf("%s:%s", u.Hostname(), clientPort)
+
+		clientEndpoints = append(clientEndpoints, updatedURL)
+	}
+	return clientEndpoints
 }

@@ -15,35 +15,78 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strings"
 
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
-func parseEtcdUrls(strs []string) ([]url.URL, error) {
-	urls := make([]url.URL, 0, len(strs))
-	for _, str := range strs {
-		u, err := url.Parse(str)
-		if err != nil {
-			return nil, fmt.Errorf("invalid url %s: %s", str, err)
-		}
-		urls = append(urls, *u)
-	}
-
-	return urls, nil
-}
-
 func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
-	config.Name = "localhost"
-	config.Dir = s.dataDir
-	// config.LPUrls = parseEtcdUrls([]string{"http://0.0.0.0:2380"})
-	// config.LCUrls = parseEtcdUrls([]string{"http://0.0.0.0:2379"})
-	// config.APUrls = parseEtcdUrls([]string{"http://localhost:2380"})
-	// config.ACUrls = parseEtcdUrls([]string{"http://localhost:2379"})
-	config.InitialCluster = "localhost=http://localhost:2380"
 
-	config.LogLevel = "debug" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	config.Name = s.etcdID
+	config.Dir = s.dataDir
+	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
+
+	etcdURL, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
+	if err != nil {
+		log.Warnf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL")
+	}
+
+	config.AdvertisePeerUrls = []url.URL{{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
+	}}
+
+	config.ListenPeerUrls = []url.URL{{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
+	}}
+
+	config.ListenClientUrls = []url.URL{{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
+	}}
+
+	config.AdvertiseClientUrls = []url.URL{{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
+	}}
+
+	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
+
+	// TODO: Cassie do extra validation that the client port != peer port -> dont fail silently
+	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
+
 	return config
+}
+
+func peerHostAndPort(name string, initialCluster []string) (string, string, error) {
+	for _, scheduler := range initialCluster {
+		idAndAddress := strings.SplitN(scheduler, "=", 2)
+		if len(idAndAddress) != 2 {
+			log.Warnf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
+			continue
+		}
+
+		id := strings.TrimPrefix(idAndAddress[0], "http://")
+		if id == name {
+			address, err := url.Parse(idAndAddress[1])
+			if err != nil {
+				log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
+				continue
+			}
+
+			host, port, err := net.SplitHostPort(address.Host)
+			if err != nil {
+				return "", "", fmt.Errorf("error extracting port: %w", err)
+			}
+
+			return host, port, nil
+		}
+	}
+
+	return "", "", fmt.Errorf("scheduler ID: %s is not found in initial cluster", name)
 }

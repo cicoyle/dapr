@@ -59,6 +59,7 @@ type Daprd struct {
 	publicPort       int
 	metricsPort      int
 	profilePort      int
+	schedulerAddress *string
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -167,6 +168,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
+		schedulerAddress: opts.schedulerAddress,
 	}
 }
 
