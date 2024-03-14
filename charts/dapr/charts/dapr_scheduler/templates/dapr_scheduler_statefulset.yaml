@@ -72,6 +72,7 @@ spec:
         volumeMounts:
           - name: data-dir
             mountPath: {{ .Values.cluster.EtcdDataDirPath }}
+            readOnly: false
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
@@ -85,8 +86,10 @@ spec:
         ports:
           - containerPort: {{ .Values.ports.apiPort }}
             name: api
-          - containerPort: {{ .Values.ports.etcdRPCPort }}
-            name: embedded-etcd
+          - containerPort: {{ .Values.ports.etcdRPCClientPort }}
+            name: etcd-client
+          - containerPort: {{ .Values.ports.etcdRPCPeerPort }}
+            name: etcd-peer
 {{- if eq .Values.global.prometheus.enabled true }}
           - name: metrics
             containerPort: {{ .Values.global.prometheus.port }}
@@ -108,6 +111,12 @@ spec:
         - "/scheduler"
         - "--"
 {{- end }}
+        - "--id"
+        - "$(SCHEDULER_ID)"
+        - "--initial-cluster"
+        - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
+        - "--etcd-client-ports"
+        - {{ include "dapr_scheduler.etcdclientports" . | toYaml | trim }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -152,6 +161,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         {{- range $name, $value := .Values.extraEnvVars }}
         - name: "{{ $name }}"
           value: "{{ $value }}"
@@ -159,7 +172,8 @@ spec:
       serviceAccountName: dapr-scheduler
       volumes:
       - name: data-dir
-        emptyDir: {}
+        emptyDir:
+          medium: Memory
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle

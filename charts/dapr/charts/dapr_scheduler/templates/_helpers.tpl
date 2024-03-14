@@ -24,15 +24,42 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
-Create chart name and version as used by the chart label.
+Create initial cluster peer list dynamically based on replicaCount.
 */}}
-{{- define "dapr_scheduler.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- define "dapr_scheduler.initialcluster" -}}
+{{- $initialCluster := "" -}}
+{{- $namespace := .Release.Namespace -}}
+{{- $replicaCount := int .Values.replicaCount -}}
+{{- range $i, $e := until $replicaCount -}}
+{{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
+{{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceName $namespace -}}
+{{- $peer := printf "%s=http://%s:%d" $instanceName $svcName (int $.Values.ports.etcdRPCPeerPort) -}}
+{{- $initialCluster = printf "%s%s" $initialCluster $peer -}}
+{{- if ne (int $i) (sub $replicaCount 1) -}}
+{{- $initialCluster = printf "%s," $initialCluster -}}
+{{- end -}}
+{{- end -}}
+{{- $initialCluster -}}
 {{- end -}}
 
 {{/*
-Create initial cluster peer list.
+Create etcd client ports list dynamically based on replicaCount.
 */}}
-{{- define "dapr_scheduler.initialcluster" -}}
-{{- print "dapr-scheduler-server-0=dapr-scheduler-server-0.dapr-scheduler-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.etcdRPCPort ",dapr-scheduler-server-1=dapr-scheduler-server-1.dapr-scheduler-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.etcdRPCPort ",dapr-scheduler-server-2=dapr-scheduler-server-2.dapr-scheduler-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.etcdRPCPort -}}
+{{- define "dapr_scheduler.etcdclientports" -}}
+{{- $etcdClientPorts := "" -}}
+{{- $namespace := .Release.Namespace -}}
+{{- $replicaCount := int .Values.replicaCount -}}
+{{- range $i, $e := until $replicaCount -}}
+{{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
+{{/*{{- $svcName := printf "%s.%s" $instanceName $namespace -}}*/}}
+{{- $clientPort := int $.Values.ports.etcdRPCClientPort -}}
+{{- $instancePortPair := printf "%s=%d" $instanceName $clientPort -}}
+{{- if gt $i 0 -}}
+{{- $etcdClientPorts = printf "%s,%s" $etcdClientPorts $instancePortPair -}}
+{{- else -}}
+{{- $etcdClientPorts = $instancePortPair -}}
 {{- end -}}
+{{- end -}}
+{{- $etcdClientPorts -}}
+{{- end -}}
+
