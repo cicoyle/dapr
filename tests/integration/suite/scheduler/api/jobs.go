@@ -87,35 +87,6 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
-
-			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
-			require.NotNil(t, resp)
-			require.Equal(t, name, resp.GetJob().GetName())
-			require.NoError(t, err)
 		}
-
-		resp, err := client.ListJobs(ctx, &rtv1.ListJobsRequest{
-			AppId: j.daprd.AppID(),
-		})
-		require.NoError(t, err)
-		count := len(resp.GetJobs())
-		require.Equal(t, 10, count)
-
-		for i := 1; i <= 10; i++ {
-			name := "test" + strconv.Itoa(i)
-
-			_, err = client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
-			require.NoError(t, err)
-
-			resp, nerr := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
-			require.Nil(t, resp)
-			require.Error(t, nerr)
-		}
-
-		resp, err = client.ListJobs(ctx, &rtv1.ListJobsRequest{
-			AppId: j.daprd.AppID(),
-		})
-		require.Empty(t, resp.GetJobs())
-		require.NoError(t, err)
 	})
 }

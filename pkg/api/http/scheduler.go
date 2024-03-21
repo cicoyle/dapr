@@ -52,26 +52,6 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 				Name: "DeleteJob",
 			},
 		},
-		{
-			Methods: []string{http.MethodGet},
-			Route:   "job/{name}",
-			Version: apiVersionV1,
-			Group:   endpointGroupSchedulerV1Alpha1,
-			Handler: a.onGetJobHandler(),
-			Settings: endpoints.EndpointSettings{
-				Name: "GetJob",
-			},
-		},
-		{
-			Methods: []string{http.MethodGet},
-			Route:   "jobs/{app_id}",
-			Version: apiVersionV1,
-			Group:   endpointGroupSchedulerV1Alpha1,
-			Handler: a.onListJobsHandler(),
-			Settings: endpoints.EndpointSettings{
-				Name: "ListJobs",
-			},
-		},
 	}
 }
 
@@ -118,46 +98,6 @@ func (a *api) onDeleteJobHandler() http.HandlerFunc {
 			OutModifier: func(out *emptypb.Empty) (any, error) {
 				// Nullify the response so status code is 204
 				return nil, nil // empty body
-			},
-		},
-	)
-}
-
-func (a *api) onGetJobHandler() http.HandlerFunc {
-	return UniversalHTTPHandler(
-		a.universal.GetJob,
-		UniversalHTTPHandlerOpts[*runtimev1pb.GetJobRequest, *runtimev1pb.GetJobResponse]{
-			SkipInputBody: true,
-			InModifier: func(r *http.Request, in *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobRequest, error) {
-				name := chi.URLParam(r, "name")
-				in.Name = name
-				return in, nil
-			},
-			OutModifier: func(out *runtimev1pb.GetJobResponse) (any, error) {
-				if out == nil || out.GetJob() == nil {
-					return nil, nil // empty body
-				}
-				return out.GetJob(), nil // empty body
-			},
-		},
-	)
-}
-
-func (a *api) onListJobsHandler() http.HandlerFunc {
-	return UniversalHTTPHandler(
-		a.universal.ListJobs,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ListJobsRequest, *runtimev1pb.ListJobsResponse]{
-			SkipInputBody: true,
-			InModifier: func(r *http.Request, in *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsRequest, error) {
-				appID := chi.URLParam(r, "app_id")
-				in.AppId = appID
-				return in, nil
-			},
-			OutModifier: func(out *runtimev1pb.ListJobsResponse) (any, error) {
-				if out == nil || out.GetJobs() == nil {
-					return nil, nil // empty body
-				}
-				return out.GetJobs(), nil // empty body
 			},
 		},
 	)

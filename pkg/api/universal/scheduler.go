@@ -15,7 +15,6 @@ package universal
 
 import (
 	"context"
-	"strings"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -90,67 +89,4 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 	}
 
 	return &emptypb.Empty{}, nil
-}
-
-func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
-	errMetadata := map[string]string{"app_id": a.AppID()}
-
-	response := &runtimev1pb.GetJobResponse{}
-	var internalResp *schedulerv1pb.GetJobResponse
-
-	if inReq.GetName() == "" {
-		a.logger.Error("Job name is empty.")
-		return response, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
-	}
-
-	jobName := a.AppID() + "||" + inReq.GetName()
-	internalGetJobReq := &schedulerv1pb.JobRequest{
-		JobName: jobName,
-	}
-
-	internalResp, err := a.schedulerClient.GetJob(ctx, internalGetJobReq)
-	if err != nil {
-		a.logger.Errorf("Error getting job %s", inReq.GetName())
-		return nil, apierrors.SchedulerGetJob(errMetadata, err)
-	}
-
-	response.Job = internalResp.GetJob()
-
-	// override job name, so it's the original user's job name and not the app_id prefix
-	response.Job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
-
-	return response, nil
-}
-
-func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
-	response := &runtimev1pb.ListJobsResponse{
-		Jobs: []*runtimev1pb.Job{},
-	}
-
-	if inReq.GetAppId() == "" {
-		a.logger.Error("Job appID empty.")
-		return response, apierrors.Empty("AppID", nil, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixAppID, apierrors.PostFixEmpty))
-	}
-
-	internalListReq := &schedulerv1pb.ListJobsRequest{
-		AppId: inReq.GetAppId(),
-	}
-
-	internalListResp, err := a.schedulerClient.ListJobs(ctx, internalListReq)
-	if err != nil {
-		a.logger.Errorf("Error listing jobs for app %s", inReq.GetAppId())
-		return nil, apierrors.SchedulerListJobs(map[string]string{"app_id": a.AppID()}, err)
-	}
-
-	if len(internalListResp.GetJobs()) > 0 {
-		response.Jobs = internalListResp.GetJobs()
-	}
-
-	for _, job := range response.GetJobs() {
-		jobName := job.GetName()
-		// override job name, so it's the original user's job name and not the app_id prefix
-		job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
-	}
-
-	return response, nil
 }

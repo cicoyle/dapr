@@ -1210,21 +1210,19 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			return err
 		}
 
-		// TODO: change the 3rd party library to take our format
-		jobSchedule := "@every " + req.Period
 		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:     a.actorsConfig.AppID + "||" + jobName,
-				Schedule: jobSchedule,
+				Name:     jobName,
+				Schedule: req.Period,
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
-					Value:   data,
+					Value:   data, // TODO: this should go to actorStateStore
 				},
 				DueTime: req.DueTime,
 				Ttl:     req.TTL,
 			},
-			Namespace: "",       // TODO
-			Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
+			Namespace: a.actorsConfig.Namespace,
+			Metadata:  metadata,
 		}
 
 		_, err = a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)

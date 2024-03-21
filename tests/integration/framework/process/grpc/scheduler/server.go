@@ -21,8 +21,6 @@ import (
 
 type server struct {
 	scheduleJobFn func(ctx context.Context, request *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
-	getJobFn      func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error)
-	listJobFn     func(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)
 	deleteJobFn   func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)
 	connectHostFn func(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error)
 }
@@ -30,20 +28,6 @@ type server struct {
 func (s *server) ScheduleJob(ctx context.Context, request *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 	if s.scheduleJobFn != nil {
 		return s.scheduleJobFn(ctx, request)
-	}
-	return nil, nil
-}
-
-func (s *server) GetJob(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error) {
-	if s.getJobFn != nil {
-		return s.getJobFn(ctx, request)
-	}
-	return nil, nil
-}
-
-func (s *server) ListJobs(ctx context.Context, request *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-	if s.listJobFn != nil {
-		return s.listJobFn(ctx, request)
 	}
 	return nil, nil
 }

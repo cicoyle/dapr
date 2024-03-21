@@ -14,10 +14,6 @@ service Scheduler {
 	rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
 	rpc DeleteJob(JobRequest) returns (DeleteJobResponse) {}
-	// GetJob is used by the daprd sidecar to get details of a job.
-	rpc GetJob(JobRequest) returns (GetJobResponse) {}
-	// ListJobs is used by the daprd sidecar to list jobs by app_id.
-	rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
 }
 
 message ConnectHostRequest {
@@ -71,21 +67,5 @@ message JobRequest {
 
 message DeleteJobResponse {
 	// Empty as of now
-}
-
-// GetJobResponse is the response message to convey the details of a job.
-message GetJobResponse {
-	runtime.v1.Job job = 1;
-}
-
-// ListJobsRequest is the message to list jobs by app_id.
-message ListJobsRequest {
-    // The id of the application (app_id) for which to list jobs.
-    string app_id = 1;
-}
-// ListJobsResponse is the response message to convey the list of jobs.
-message ListJobsResponse {
-    // List of jobs that match the request criteria.
-    repeated runtime.v1.Job jobs = 1;
 }
 

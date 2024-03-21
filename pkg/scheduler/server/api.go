@@ -16,12 +16,15 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
-	etcdcron "github.com/Scalingo/go-etcd-cron"
+	etcdcron "github.com/diagridio/go-etcd-cron"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	timeutils "github.com/dapr/kit/time"
 )
 
 func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
@@ -36,23 +39,26 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	case <-s.readyCh:
 	}
 
-	// TODO: figure out if we need/want namespace in job name
-	err := s.cron.AddJob(etcdcron.Job{
-		Name:     req.GetJob().GetName(),
-		Rhythm:   req.GetJob().GetSchedule(),
-		Repeats:  req.GetJob().GetRepeats(),
-		DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
-		TTL:      req.GetJob().GetTtl(),
-		Data:     req.GetJob().GetData(),
-		Metadata: req.GetMetadata(), // TODO: do I need this here?
-		Func: func(context.Context) error {
-			innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
-			if innerErr != nil {
-				return innerErr
-			}
-			return nil
-		},
-	})
+	startTime, err := parseStartTime(req.GetJob().GetDueTime())
+	if err != nil {
+		return nil, fmt.Errorf("error parsing due time: %w", err)
+	}
+	ttl, err := parseTTL(req.GetJob().GetTtl())
+	if err != nil {
+		return nil, fmt.Errorf("error parsing TTL: %w", err)
+	}
+
+	job := etcdcron.Job{
+		Name:      composeJobName(req.GetNamespace(), req.GetJob().GetName()),
+		Rhythm:    req.GetJob().GetSchedule(),
+		Repeats:   req.GetJob().GetRepeats(),
+		StartTime: startTime,
+		TTL:       ttl,
+		Payload:   req.GetJob().GetData(),
+		Metadata:  req.GetMetadata(),
+	}
+
+	err = s.cron.AddJob(ctx, job)
 	if err != nil {
 		log.Errorf("error scheduling job %s: %s", req.GetJob().GetName(), err)
 		return nil, err
@@ -61,72 +67,38 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
-func (s *Server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map[string]string) error {
-	_, err := s.TriggerJob(context.Background(), &schedulerv1pb.TriggerJobRequest{
-		JobName:   job.GetName(),
-		Namespace: namespace,
-		Metadata:  metadata,
-	})
-	if err != nil {
-		log.Errorf("error triggering job %s: %s", job.GetName(), err)
-		return err
-	}
-	return nil
-}
-
-// ListJobs is a placeholder method that needs to be implemented
-func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
-	entries := s.cron.ListJobsByPrefix(req.GetAppId() + "||")
-
-	jobs := make([]*runtimev1pb.Job, 0, len(entries))
-	for _, entry := range entries {
-		job := &runtimev1pb.Job{
-			Name:     entry.Name,
-			Schedule: entry.Rhythm,
-			Repeats:  entry.Repeats,
-			DueTime:  entry.DueTime,
-			Ttl:      entry.TTL,
-			Data:     entry.Data,
+func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, payload *anypb.Any) (etcdcron.TriggerResult, error) {
+	log.Debug("Triggering job")
+	actorType := metadata["actorType"]
+	actorID := metadata["actorId"]
+	reminderName := metadata["reminder"]
+	if actorType != "" && actorID != "" && reminderName != "" {
+		if s.actorRuntime == nil {
+			return etcdcron.Failure, fmt.Errorf("actor runtime is not configured")
 		}
 
-		jobs = append(jobs, job)
-	}
+		invokeMethod := "remind/" + reminderName
+		contentType := metadata["content-type"]
+		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
+			WithActor(actorType, actorID).
+			WithData(payload.GetValue()).
+			WithContentType(contentType)
 
-	resp := &schedulerv1pb.ListJobsResponse{Jobs: jobs}
-
-	return resp, nil
-}
-
-// GetJob is a placeholder method that needs to be implemented
-func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
-	job := s.cron.GetJob(req.GetJobName())
-	if job != nil {
-		resp := &schedulerv1pb.GetJobResponse{
-			Job: &runtimev1pb.Job{
-				Name:     job.Name,
-				Schedule: job.Rhythm,
-				Repeats:  job.Repeats,
-				DueTime:  job.DueTime,
-				Ttl:      job.TTL,
-				Data:     job.Data,
-			},
+		res, err := s.actorRuntime.Call(ctx, invokeReq)
+		if err != nil {
+			return etcdcron.Failure, err
 		}
-		return resp, nil
+
+		if res.GetStatus().GetCode() != int32(codes.OK) {
+			return etcdcron.Failure, nil
+		}
+
+		return etcdcron.OK, err
 	}
 
-	return nil, fmt.Errorf("job not found")
+	// Trigger not supported
+	log.Warn("Cannot trigger job: not supported.")
+	return etcdcron.Failure, nil
 }
 
 // DeleteJob is a placeholder method that needs to be implemented
@@ -137,7 +109,7 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	case <-s.readyCh:
 	}
 
-	err := s.cron.DeleteJob(req.GetJobName())
+	err := s.cron.DeleteJob(ctx, req.GetJobName())
 	if err != nil {
 		log.Errorf("error deleting job %s: %s", req.GetJobName(), err)
 		return nil, err
@@ -146,26 +118,42 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	return &schedulerv1pb.DeleteJobResponse{}, nil
 }
 
-func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
-	log.Info("Triggering job")
-	metadata := req.GetMetadata()
-	actorType := metadata["actorType"]
-	actorID := metadata["actorId"]
-	reminderName := metadata["reminder"]
-	if actorType != "" && actorID != "" && reminderName != "" {
-		if s.actorRuntime == nil {
-			return nil, fmt.Errorf("actor runtime is not configured")
-		}
-
-		invokeMethod := "remind/" + reminderName
-		contentType := metadata["content-type"]
-		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
-			WithActor(actorType, actorID).
-			WithData(req.GetData().GetValue()).
-			WithContentType(contentType)
-
-		_, err := s.actorRuntime.Call(ctx, invokeReq)
-		return nil, err
+// parseStartTime is a wrapper around timeutils.ParseTime that truncates the time to seconds.
+func parseStartTime(dueTime string) (time.Time, error) {
+	if dueTime == "" {
+		return time.Time{}, nil
 	}
-	return nil, fmt.Errorf("not implemented")
+
+	now := time.Now()
+	t, err := timeutils.ParseTime(dueTime, &now)
+	if err != nil {
+		return t, err
+	}
+	t = t.Truncate(time.Second)
+	return t, nil
+}
+
+func parseTTL(ttl string) (time.Duration, error) {
+	if ttl == "" {
+		return time.Duration(0), nil
+	}
+
+	years, months, days, period, _, err := timeutils.ParseDuration(ttl)
+	if err != nil {
+		return time.Duration(0), fmt.Errorf("parse error: %w", err)
+	}
+	if (years == 0) && (months == 0) && (days == 0) {
+		// Optimization to avoid the complex calculation below
+		return period, nil
+	}
+
+	return time.Until(time.Now().AddDate(years, months, days).Add(period)), nil
+}
+
+func composeJobName(namespace, jobName string) string {
+	if namespace == "" {
+		return "default||" + jobName
+	}
+
+	return namespace + "||" + jobName
 }
