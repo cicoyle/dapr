@@ -1256,6 +1256,23 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	if a.scheduler != nil {
+		jobName := constructCompositeKey(
+			"reminder",
+			req.ActorType,
+			req.ActorID,
+			req.Name,
+		)
+
+		internalDeleteJobReq := &schedulerv1pb.JobRequest{
+			JobName:   jobName,
+			Namespace: a.actorsConfig.Namespace,
+		}
+
+		_, err := a.scheduler.DeleteJob(ctx, internalDeleteJobReq)
+		return err
+	}
+
 	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}

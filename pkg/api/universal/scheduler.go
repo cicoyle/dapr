@@ -55,7 +55,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Namespace: "",  // TODO
+		Namespace: a.globalConfig.Namespace,
 		Metadata:  nil, // TODO: this should generate key if jobStateStore is configured
 	}
 
@@ -79,7 +79,8 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 
 	jobName := a.AppID() + "||" + inReq.GetName()
 	internalDeleteJobReq := &schedulerv1pb.JobRequest{
-		JobName: jobName,
+		JobName:   jobName,
+		Namespace: a.globalConfig.Namespace,
 	}
 
 	_, err := a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)

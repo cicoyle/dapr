@@ -31,7 +31,6 @@ func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest)
 	return nil, fmt.Errorf("not implemented")
 }
 
-// ScheduleJob is a placeholder method that needs to be implemented
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 	select {
 	case <-ctx.Done():
@@ -101,7 +100,6 @@ func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, pay
 	return etcdcron.Failure, nil
 }
 
-// DeleteJob is a placeholder method that needs to be implemented
 func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
 	select {
 	case <-ctx.Done():
@@ -109,9 +107,10 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	case <-s.readyCh:
 	}
 
-	err := s.cron.DeleteJob(ctx, req.GetJobName())
+	jobName := composeJobName(req.GetNamespace(), req.GetJobName())
+	err := s.cron.DeleteJob(ctx, jobName)
 	if err != nil {
-		log.Errorf("error deleting job %s: %s", req.GetJobName(), err)
+		log.Errorf("error deleting job %s: %s", jobName, err)
 		return nil, err
 	}
 

@@ -63,6 +63,7 @@ message ScheduleJobResponse {
 // JobRequest is the message used by the daprd sidecar to delete or get a job.
 message JobRequest {
 	string job_name = 1;
+	string namespace = 2;
 }
 
 message DeleteJobResponse {
