@@ -163,7 +163,7 @@ func New(origArgs []string) (*Options, error) {
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
 	var placementServiceHostAddr string
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
-	fs.StringVar(&opts.SchedulerAddress, "scheduler-host-address", "", "Address(es) of the scheduler service instance(s), as comma separated host:port pairs")
+	fs.StringVar(&opts.SchedulerAddress, "scheduler-host-address", "", "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
 
