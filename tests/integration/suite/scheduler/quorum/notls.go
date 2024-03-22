@@ -125,12 +125,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 func checkKeysForAppID(t *testing.T, keys []*mvccpb.KeyValue) {
 	for _, kv := range keys {
-		if strings.Contains(string(kv.Key), "etcd_cron/appid__testjob") {
-			require.True(t, true, "Key exists: 'etcd_cron/appid__testjob'")
+		if strings.HasSuffix(string(kv.Key), "/jobs/default||appID||testJob") {
+			require.True(t, true, "Key exists: '/jobs/default||appID||testJob'")
 			return
 		}
 	}
-	require.Fail(t, "Key not found: 'etcd_cron/appid__testjob'")
+	require.Fail(t, "Key not found: '/jobs/default||appID||testJob'")
 }
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {
