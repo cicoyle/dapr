@@ -1213,7 +1213,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     jobName,
-				Schedule: req.Period,
+				Schedule: "@every " + req.Period,
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
 					Value:   data, // TODO: this should go to actorStateStore
