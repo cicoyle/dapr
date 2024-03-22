@@ -17,9 +17,15 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -38,13 +44,20 @@ func init() {
 type jobs struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
+
+	clientPort int
+	idPrefix   string
 }
 
 func (j *jobs) Setup(t *testing.T) []framework.Option {
+	j.idPrefix = uuid.NewString()
+
 	fp := util.ReservePorts(t, 2)
 
+	j.clientPort = fp.Port(t, 1)
+
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t, 1)),
+		"scheduler0=" + strconv.Itoa(j.clientPort),
 	}
 
 	j.scheduler = scheduler.New(t,
@@ -72,14 +85,14 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CRUD 10 jobs", func(t *testing.T) {
 		for i := 1; i <= 10; i++ {
-			name := "test" + strconv.Itoa(i)
+			name := j.idPrefix + "_" + strconv.Itoa(i)
 
 			req := &rtv1.ScheduleJobRequest{
 				Job: &rtv1.Job{
 					Name:     name,
 					Schedule: "@every 1s",
 					Data: &anypb.Any{
-						Value: []byte("test"),
+						Value: []byte(j.idPrefix),
 					},
 					Ttl: "20s",
 				},
@@ -87,6 +100,47 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
+
+			chosenSchedulerEtcdKeys := getEtcdKeys(t, j.clientPort)
+			assert.True(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
+		}
+
+		for i := 1; i <= 10; i++ {
+			name := j.idPrefix + "_" + strconv.Itoa(i)
+
+			_, err := client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
+			require.NoError(t, err)
+
+			chosenSchedulerEtcdKeys := getEtcdKeys(t, j.clientPort)
+			assert.False(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
 		}
 	})
+}
+
+func getEtcdKeys(t *testing.T, port int) []*mvccpb.KeyValue {
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("localhost:%d", port)},
+		DialTimeout: 5 * time.Second,
+	})
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Get keys with prefix
+	resp, err := client.Get(ctx, "", clientv3.WithPrefix())
+	require.NoError(t, err)
+
+	return resp.Kvs
+}
+
+func checkKeysForAppID(key string, keys []*mvccpb.KeyValue) bool {
+	for _, kv := range keys {
+		if strings.HasSuffix(string(kv.Key), "||"+key) {
+			return true
+		}
+	}
+
+	return false
 }
