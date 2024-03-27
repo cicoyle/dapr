@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	timeutils "github.com/dapr/kit/time"
 )
@@ -32,6 +33,7 @@ func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest)
 }
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
+	// TODO(artursouza): Add authorization check between caller and request.
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -48,7 +50,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	}
 
 	job := etcdcron.Job{
-		Name:      composeJobName(req.GetNamespace(), req.GetJob().GetName()),
+		Name:      req.GetJob().GetName(),
 		Rhythm:    req.GetJob().GetSchedule(),
 		Repeats:   req.GetJob().GetRepeats(),
 		StartTime: startTime,
@@ -95,19 +97,20 @@ func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, pay
 		return etcdcron.OK, err
 	}
 
-	// Trigger not supported
-	log.Warn("Cannot trigger job: not supported.")
+	// TODO(artursouza): echo the job's name instead once we change the library's callback method.
+	log.Warn("Cannot trigger job: %v", metadata)
 	return etcdcron.Failure, nil
 }
 
-func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+	// TODO(artursouza): Add authorization check between caller and request.
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-s.readyCh:
 	}
 
-	jobName := composeJobName(req.GetNamespace(), req.GetJobName())
+	jobName := req.GetJobName()
 	err := s.cron.DeleteJob(ctx, jobName)
 	if err != nil {
 		log.Errorf("error deleting job %s: %s", jobName, err)
@@ -115,6 +118,38 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	}
 
 	return &schedulerv1pb.DeleteJobResponse{}, nil
+}
+
+func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
+	// TODO(artursouza): Add authorization check between caller and request.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.readyCh:
+	}
+
+	jobName := req.GetJobName()
+	// TODO(artursouza): Use "FetchJob()" instead to read from db instead of running jobs only - once method exists.
+	job := s.cron.GetJob(jobName)
+	if job == nil {
+		return nil, fmt.Errorf("job not found: %s", jobName)
+	}
+
+	ttl := ""
+	if job.TTL > 0 {
+		ttl = job.TTL.String()
+	}
+
+	return &schedulerv1pb.GetJobResponse{
+		Job: &runtime.Job{
+			Name:     jobName,
+			Schedule: job.Rhythm,
+			Repeats:  job.Repeats,
+			Ttl:      ttl,
+			DueTime:  job.StartTime.Format(time.RFC3339),
+			Data:     job.Payload,
+		},
+	}, nil
 }
 
 // parseStartTime is a wrapper around timeutils.ParseTime that truncates the time to seconds.
@@ -147,12 +182,4 @@ func parseTTL(ttl string) (time.Duration, error) {
 	}
 
 	return time.Until(time.Now().AddDate(years, months, days).Add(period)), nil
-}
-
-func composeJobName(namespace, jobName string) string {
-	if namespace == "" {
-		return "default||" + jobName
-	}
-
-	return namespace + "||" + jobName
 }

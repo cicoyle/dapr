@@ -12,8 +12,10 @@ service Scheduler {
 	rpc ConnectHost(ConnectHostRequest) returns (ConnectHostResponse) {}
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+	// Get a job
+	rpc GetJob(GetJobRequest) returns (GetJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
-	rpc DeleteJob(JobRequest) returns (DeleteJobResponse) {}
+	rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse) {}
 }
 
 message ConnectHostRequest {
@@ -47,23 +49,33 @@ message ScheduleJobRequest {
 	// The job to be scheduled.
 	runtime.v1.Job job = 1;
 
-	// Namespace of the job
-	string namespace = 2;
-
 	// The metadata associated with the job.
-	// The sidecar will create the unique `key` for storing data in the state store and pass the generated `key` along to the scheduler service for data lookup upon ‘trigger’ time later on. 
-	// The sidecar will also add metadata in order to know whether this job is registered for an actor. This is needed, as the routing mechanism for actors is different for the callback.
-	map<string,string> metadata = 3;
+	map<string,string> metadata = 2;
 }
 
 message ScheduleJobResponse {
 	// Empty as of now
 }
 
-// JobRequest is the message used by the daprd sidecar to delete or get a job.
-message JobRequest {
+// GetJobRequest is the message used by the daprd sidecar to delete or get a job.
+message GetJobRequest {
 	string job_name = 1;
-	string namespace = 2;
+
+	// The metadata associated with the job.
+	map<string,string> metadata = 2;
+}
+
+// GetJobResponse is the response message to convey the details of a job.
+message GetJobResponse {
+	runtime.v1.Job job = 1;
+}
+
+// DeleteJobRequest is the message used by the daprd sidecar to delete or get a job.
+message DeleteJobRequest {
+	string job_name = 1;
+
+	// The metadata associated with the job.
+	map<string,string> metadata = 2;
 }
 
 message DeleteJobResponse {

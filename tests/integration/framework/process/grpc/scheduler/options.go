@@ -31,7 +31,7 @@ type options struct {
 	withRegister func(*grpc.Server)
 
 	scheduleJobFn func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
-	deleteJobFn   func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)
+	deleteJobFn   func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
 	connectHostFn func(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error)
 }
 
@@ -53,7 +53,7 @@ func WithScheduleJobFn(fn func(ctx context.Context, request *schedulerv1pb.Sched
 	}
 }
 
-func WithDeleteJobFn(fn func(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)) func(*options) {
+func WithDeleteJobFn(fn func(ctx context.Context, request *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)) func(*options) {
 	return func(o *options) {
 		o.deleteJobFn = fn
 	}

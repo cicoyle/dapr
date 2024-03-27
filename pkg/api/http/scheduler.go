@@ -52,6 +52,16 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 				Name: "DeleteJob",
 			},
 		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "job/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupSchedulerV1Alpha1,
+			Handler: a.onGetJobHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetJob",
+			},
+		},
 	}
 }
 
@@ -62,7 +72,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
 				// Users should set the name in the url, and not in the url and body
 				if (chi.URLParam(r, nameParam) == "") || (in.GetJob().GetName() != "") {
-					return nil, apierrors.SchedulerURLName(map[string]string{"app_id": a.universal.AppID()})
+					return nil, apierrors.SchedulerURLName(map[string]string{"appId": a.universal.AppID()})
 				}
 
 				job := &runtimev1pb.Job{
@@ -98,6 +108,26 @@ func (a *api) onDeleteJobHandler() http.HandlerFunc {
 			OutModifier: func(out *emptypb.Empty) (any, error) {
 				// Nullify the response so status code is 204
 				return nil, nil // empty body
+			},
+		},
+	)
+}
+
+func (a *api) onGetJobHandler() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.GetJob,
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetJobRequest, *runtimev1pb.GetJobResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobRequest, error) {
+				name := chi.URLParam(r, "name")
+				in.Name = name
+				return in, nil
+			},
+			OutModifier: func(out *runtimev1pb.GetJobResponse) (any, error) {
+				if out == nil || out.GetJob() == nil {
+					return nil, nil // empty body
+				}
+				return out.GetJob(), nil // empty body
 			},
 		},
 	)

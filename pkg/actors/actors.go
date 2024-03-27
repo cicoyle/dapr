@@ -1191,6 +1191,8 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	if a.scheduler != nil {
 		metadata := map[string]string{
+			"scope":        "actor",
+			"namespace":    a.actorsConfig.Namespace,
 			"appId":        a.actorsConfig.AppID,
 			"actorType":    req.ActorType,
 			"actorId":      req.ActorID,
@@ -1199,6 +1201,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		}
 
 		jobName := constructCompositeKey(
+			a.actorsConfig.Namespace,
 			"reminder",
 			req.ActorType,
 			req.ActorID,
@@ -1221,8 +1224,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 				DueTime: req.DueTime,
 				Ttl:     req.TTL,
 			},
-			Namespace: a.actorsConfig.Namespace,
-			Metadata:  metadata,
+			Metadata: metadata,
 		}
 
 		_, err = a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)
@@ -1257,16 +1259,25 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
 	if a.scheduler != nil {
+		metadata := map[string]string{
+			"scope":     "actor",
+			"namespace": a.actorsConfig.Namespace,
+			"appId":     a.actorsConfig.AppID,
+			"actorType": req.ActorType,
+			"actorId":   req.ActorID,
+		}
+
 		jobName := constructCompositeKey(
+			a.actorsConfig.Namespace,
 			"reminder",
 			req.ActorType,
 			req.ActorID,
 			req.Name,
 		)
 
-		internalDeleteJobReq := &schedulerv1pb.JobRequest{
-			JobName:   jobName,
-			Namespace: a.actorsConfig.Namespace,
+		internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
+			JobName:  jobName,
+			Metadata: metadata,
 		}
 
 		_, err := a.scheduler.DeleteJob(ctx, internalDeleteJobReq)
