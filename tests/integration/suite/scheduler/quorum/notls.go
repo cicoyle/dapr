@@ -99,8 +99,9 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			Name:     n.jobName,
 			Schedule: "@every 1s",
 		},
-		Namespace: "default",
-		Metadata:  nil,
+		Metadata: map[string]string{
+			"namespace": "default",
+		},
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
@@ -125,16 +126,19 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
 		checkKeysForAppID(t, n.jobName, diffSchedulerEtcdKeys)
 	}
+
+	fmt.Println("SUCCESS!")
 }
 
 func checkKeysForAppID(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
+	found := false
 	for _, kv := range keys {
 		if strings.HasSuffix(string(kv.Key), "||"+jobName) {
-			require.True(t, true, "Key exists: '%s'", jobName)
-			return
+			found = true
+			break
 		}
 	}
-	require.Fail(t, "Key not found: '%s'", jobName)
+	require.True(t, found, "job's key not found: '%s'", jobName)
 }
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {

@@ -101,8 +101,13 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
-			chosenSchedulerEtcdKeys := getEtcdKeys(t, j.clientPort)
+			chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, j.clientPort)
 			assert.True(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
+
+			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
+			require.NotNil(t, resp)
+			require.Equal(t, name, resp.GetJob().GetName())
+			require.NoError(t, err)
 		}
 
 		for i := 1; i <= 10; i++ {
@@ -111,22 +116,19 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
 			require.NoError(t, err)
 
-			chosenSchedulerEtcdKeys := getEtcdKeys(t, j.clientPort)
+			chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, j.clientPort)
 			assert.False(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
 		}
 	})
 }
 
-func getEtcdKeys(t *testing.T, port int) []*mvccpb.KeyValue {
+func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{fmt.Sprintf("localhost:%d", port)},
 		DialTimeout: 5 * time.Second,
 	})
 	require.NoError(t, err)
 	defer client.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	// Get keys with prefix
 	resp, err := client.Get(ctx, "", clientv3.WithPrefix())

@@ -53,7 +53,10 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 			func(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 				return nil, stderrors.New("schedule job error")
 			}),
-		scheduler.WithDeleteJobFn(func(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+		scheduler.WithGetJobFn(func(ctx context.Context, request *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
+			return nil, stderrors.New("get job error")
+		}),
+		scheduler.WithDeleteJobFn(func(ctx context.Context, request *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
 			return nil, stderrors.New("delete job error")
 		}),
 	)

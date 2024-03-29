@@ -483,6 +483,9 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
+// Needed due to a deprecated method used in functional tests
+replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
+
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //

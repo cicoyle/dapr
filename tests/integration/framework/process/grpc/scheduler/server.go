@@ -21,7 +21,8 @@ import (
 
 type server struct {
 	scheduleJobFn func(ctx context.Context, request *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
-	deleteJobFn   func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)
+	getJobFn      func(context.Context, *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error)
+	deleteJobFn   func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
 	connectHostFn func(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error)
 }
 
@@ -32,7 +33,14 @@ func (s *server) ScheduleJob(ctx context.Context, request *schedulerv1pb.Schedul
 	return nil, nil
 }
 
-func (s *server) DeleteJob(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+func (s *server) GetJob(ctx context.Context, request *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
+	if s.getJobFn != nil {
+		return s.getJobFn(ctx, request)
+	}
+	return nil, nil
+}
+
+func (s *server) DeleteJob(ctx context.Context, request *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
 	if s.deleteJobFn != nil {
 		return s.deleteJobFn(ctx, request)
 	}
