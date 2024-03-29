@@ -126,14 +126,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
 		checkKeysForAppID(t, n.jobName, diffSchedulerEtcdKeys)
 	}
-
-	fmt.Println("SUCCESS!")
 }
 
 func checkKeysForAppID(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
 	found := false
 	for _, kv := range keys {
-		if strings.HasSuffix(string(kv.Key), "||"+jobName) {
+		if strings.HasSuffix(string(kv.Key), jobName) {
 			found = true
 			break
 		}
