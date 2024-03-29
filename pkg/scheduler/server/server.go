@@ -239,7 +239,7 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 	case <-ctx.Done():
 		log.Info("Embedded Etcd shutting down")
 		cron.Wait()
-		etcd.Close()
+		// Don't close etcd here because it has a defer close() already.
 		return nil
 	}
 }
