@@ -20,7 +20,6 @@ import (
 
 	etcdcron "github.com/diagridio/go-etcd-cron"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -48,15 +47,19 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	if err != nil {
 		return nil, fmt.Errorf("error parsing TTL: %w", err)
 	}
+	expiration := time.Time{}
+	if ttl > 0 {
+		expiration = time.Now().Add(ttl)
+	}
 
 	job := etcdcron.Job{
-		Name:      req.GetJob().GetName(),
-		Rhythm:    req.GetJob().GetSchedule(),
-		Repeats:   req.GetJob().GetRepeats(),
-		StartTime: startTime,
-		TTL:       ttl,
-		Payload:   req.GetJob().GetData(),
-		Metadata:  req.GetMetadata(),
+		Name:       req.GetJob().GetName(),
+		Rhythm:     req.GetJob().GetSchedule(),
+		Repeats:    req.GetJob().GetRepeats(),
+		StartTime:  startTime,
+		Expiration: expiration,
+		Payload:    req.GetJob().GetData(),
+		Metadata:   req.GetMetadata(),
 	}
 
 	err = s.cron.AddJob(ctx, job)
@@ -68,8 +71,10 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
-func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, payload *anypb.Any) (etcdcron.TriggerResult, error) {
-	log.Debug("Triggering job")
+func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (etcdcron.TriggerResult, error) {
+	jobName := req.JobName
+	metadata := req.Metadata
+	payload := req.Payload
 	actorType := metadata["actorType"]
 	actorID := metadata["actorId"]
 	reminderName := metadata["reminder"]
@@ -90,15 +95,16 @@ func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, pay
 			return etcdcron.Failure, err
 		}
 
-		if res.GetStatus().GetCode() != int32(codes.OK) {
+		retCode := int(res.GetStatus().GetCode())
+		// The return code varies based on the actor being HTTP or gRPC
+		if (retCode != int(codes.OK)) && (retCode != 200) {
 			return etcdcron.Failure, nil
 		}
 
 		return etcdcron.OK, err
 	}
 
-	// TODO(artursouza): echo the job's name instead once we change the library's callback method.
-	log.Warn("Cannot trigger job: %v", metadata)
+	log.Warnf("Cannot trigger job: %v", jobName)
 	return etcdcron.Failure, nil
 }
 
@@ -129,15 +135,20 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	}
 
 	jobName := req.GetJobName()
-	// TODO(artursouza): Use "FetchJob()" instead to read from db instead of running jobs only - once method exists.
+	// TODO(artursouza): Use "FetchJob()" to read from db instead of running jobs only - once method exists.
 	job := s.cron.GetJob(jobName)
 	if job == nil {
 		return nil, fmt.Errorf("job not found: %s", jobName)
 	}
 
 	ttl := ""
-	if job.TTL > 0 {
-		ttl = job.TTL.String()
+	if !job.Expiration.IsZero() {
+		ttl = time.Until(job.Expiration).String()
+	}
+
+	dueTime := ""
+	if !job.StartTime.IsZero() {
+		dueTime = job.StartTime.Format(time.RFC3339)
 	}
 
 	return &schedulerv1pb.GetJobResponse{
@@ -146,7 +157,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 			Schedule: job.Rhythm,
 			Repeats:  job.Repeats,
 			Ttl:      ttl,
-			DueTime:  job.StartTime.Format(time.RFC3339),
+			DueTime:  dueTime,
 			Data:     job.Payload,
 		},
 	}, nil

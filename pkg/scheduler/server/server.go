@@ -19,6 +19,8 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 
 	etcdcron "github.com/diagridio/go-etcd-cron"
+	etcdcron_partitioning "github.com/diagridio/go-etcd-cron/partitioning"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/config"
@@ -43,6 +46,26 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server")
 
+const (
+	// This is the namespace used to prefix all entries in etcdCron.
+	// Namespace is useful to separate multiple clusters of dist scheduler.
+	// We use "_" in the name to make the sure default namespace will not conflict in K8s.
+	// We try to use NAMESPACE env here if set, otherwise use this default.
+	// This is not the namespace of the appIds scheduling jobs, it is the ns of the scheduler.
+	defaultEtcdCronNamespace = "_dapr"
+
+	// Virtual partitions are used to determine ownership of a given job.
+	// It is the upper limit of how many scheduler instances can be provisioned.
+	// Not configurable by design because changing it can cause problems:
+	//   - Decreasing this can cause persisted jobs with upper partitions to be ignored.
+	//   - Increasing this is OK as long as all the jobs eventually run with the same version.
+	//     Also, increasing is a one way operation.
+	//
+	// If user deploys more than this number of schedulers, it means that additional instances
+	// will crash because cron will fail at start up with param validation.
+	cronVirtualPartitions = 23
+)
+
 type Options struct {
 	AppID            string
 	HostAddress      string
@@ -53,6 +76,7 @@ type Options struct {
 	EtcdClientPorts  []string
 	Mode             modes.DaprMode
 	Port             int
+	ReplicaCount     int
 
 	Security security.Handler
 
@@ -67,6 +91,7 @@ type Server struct {
 	mode          modes.DaprMode
 
 	dataDir          string
+	replicaCount     int
 	etcdID           string
 	etcdInitialPeers []string
 	etcdClientPorts  map[string]string
@@ -95,6 +120,7 @@ func New(opts Options) *Server {
 		listenAddress: opts.ListenAddress,
 		mode:          opts.Mode,
 
+		replicaCount:     opts.ReplicaCount,
 		etcdID:           opts.EtcdID,
 		etcdInitialPeers: opts.EtcdInitialPeers,
 		etcdClientPorts:  clientPorts,
@@ -219,10 +245,33 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 		return err
 	}
 
-	// pass in initial cluster endpoints, but with client ports
+	cronInstanceId, err := extractNumberIdFromName(s.etcdID)
+	if err != nil {
+		return err
+	}
+
+	if cronInstanceId < 0 {
+		return fmt.Errorf("invalid cron instance id: %d", cronInstanceId)
+	}
+
+	partitioning, err := etcdcron_partitioning.NewPartitioning(cronVirtualPartitions, s.replicaCount, cronInstanceId)
+	if err != nil {
+		return err
+	}
+
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = defaultEtcdCronNamespace
+	}
+
 	cron, err := etcdcron.New(
+		etcdcron.WithNamespace(namespace),
+		etcdcron.WithPartitioning(partitioning),
 		etcdcron.WithEtcdClient(c),
 		etcdcron.WithTriggerFunc(s.triggerJob),
+		etcdcron.WithErrorsHandler(func(ctx context.Context, j etcdcron.Job, err error) {
+			log.Errorf("error processing job %s: %v", j.Name, err)
+		}),
 	)
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
@@ -272,4 +321,20 @@ func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []
 		clientEndpoints = append(clientEndpoints, updatedURL)
 	}
 	return clientEndpoints
+}
+
+func extractNumberIdFromName(input string) (int, error) {
+	re := regexp.MustCompile(`\d+`)
+	matches := re.FindAllString(input, -1)
+
+	if len(matches) == 0 {
+		return 0, fmt.Errorf("no integer found in the string")
+	}
+
+	num, err := strconv.Atoi(matches[0])
+	if err != nil {
+		return 0, err
+	}
+
+	return num, nil
 }

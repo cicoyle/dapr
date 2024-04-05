@@ -491,6 +491,7 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
+replace github.com/diagridio/go-etcd-cron => ../../diagridio/go-etcd-cron
 
 //
 // Then, run `make modtidy-all` in this repository.

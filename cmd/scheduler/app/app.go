@@ -94,6 +94,7 @@ func Run() {
 				Security:         secHandler,
 				PlacementAddress: opts.PlacementAddress,
 				Mode:             modes.DaprMode(opts.Mode),
+				ReplicaCount:     opts.ReplicaCount,
 			})
 
 			return server.Run(ctx)

@@ -38,8 +38,10 @@ const (
 	actorType       = "PerfTestActorReminder"
 	appName         = "perf-actor-reminder-service"
 
-	// Target for the QPS
-	targetQPS = 56
+	// Target for the QPS.
+	// Measured with 3 and 5 replicas of scheduler service.
+	// If you run with only 1 replica, the QPS is much higher.
+	targetQPS = 1500
 )
 
 var tr *runner.TestRunner
@@ -75,7 +77,7 @@ func TestMain(m *testing.M) {
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params(
-		perf.WithQPS(500),
+		perf.WithQPS(2000),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
@@ -93,7 +95,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	// Perform dapr test
 	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorType)
 	p.TargetEndpoint = endpoint
-	p.Payload = `{"dueTime":"24h","period":"24h"}`
+	p.Payload = `{"dueTime":"24h","period":"24h","ttl":"90s"}` // So reminders don't fire and test only registration.
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -105,7 +107,99 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
-	// Let test run for 90s triggering the timers and collect metrics.
+	// Wait for reminder to expire.
+	time.Sleep(90 * time.Second)
+
+	appUsage, err := tr.Platform.GetAppUsage(appName)
+	require.NoError(t, err)
+
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(appName)
+	require.NoError(t, err)
+
+	restarts, err := tr.Platform.GetTotalRestarts(appName)
+	require.NoError(t, err)
+
+	t.Logf("dapr test results: %s", string(daprResp))
+	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+
+	var daprResult perf.TestResult
+	err = json.Unmarshal(daprResp, &daprResult)
+	require.NoErrorf(t, err, "Failed to unmarshal: %s", string(daprResp))
+
+	percentiles := map[int]string{2: "90th", 3: "99th"}
+
+	for k, v := range percentiles {
+		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
+		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
+	}
+	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, p.QPS)
+
+	report := perf.NewTestReport(
+		[]perf.TestResult{daprResult},
+		"Actor Reminder",
+		sidecarUsage,
+		appUsage)
+	report.SetTotalRestartCount(restarts)
+	err = utils.UploadAzureBlob(report)
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	summary.ForTest(t).
+		Service(appName).
+		Client(appName).
+		CPU(appUsage.CPUm).
+		Memory(appUsage.MemoryMb).
+		SidecarCPU(sidecarUsage.CPUm).
+		SidecarMemory(sidecarUsage.MemoryMb).
+		Restarts(restarts).
+		ActualQPS(daprResult.ActualQPS).
+		Params(p).
+		OutputFortio(daprResult).
+		Flush()
+
+	assert.Equal(t, 0, daprResult.RetCodes.Num400)
+	assert.Equal(t, 0, daprResult.RetCodes.Num500)
+	assert.Equal(t, 0, restarts)
+	assert.True(t, daprResult.ActualQPS > targetQPS)
+}
+
+func TestActorReminderTriggerPerformance(t *testing.T) {
+	p := perf.Params(
+		perf.WithQPS(2000),
+		perf.WithConnections(8),
+		perf.WithDuration("1m"),
+		perf.WithPayload("{}"),
+	)
+
+	// Get the ingress external url of test app
+	testAppURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
+
+	// Check if test app endpoint is available
+	t.Logf("test app url: %s", testAppURL+"/health")
+	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	require.NoError(t, err)
+
+	// Perform dapr test
+	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorType)
+	p.TargetEndpoint = endpoint
+	p.Payload = `{"dueTime":"24h","period":"24h","ttl":"90s"}` // So reminders don't fire and test only registration.
+	body, err := json.Marshal(&p)
+	require.NoError(t, err)
+
+	t.Logf("running dapr test with params: %s", body)
+	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testAppURL), body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
+
+	// Wait for reminder to expire.
 	time.Sleep(90 * time.Second)
 
 	appUsage, err := tr.Platform.GetAppUsage(appName)

@@ -54,6 +54,8 @@ env:
   AZURE_REGIONS: "westus3"
   # Container registry where to cache perf test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  # Number of replicas for dist scheduler
+  DAPR_SCHEDULER_REPLICAS: "3"
 
 jobs:
   deploy-infrastructure:

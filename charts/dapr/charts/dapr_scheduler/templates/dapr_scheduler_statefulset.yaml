@@ -113,6 +113,8 @@ spec:
 {{- end }}
         - "--id"
         - "$(SCHEDULER_ID)"
+        - "--replica-count"
+        - "{{ .Values.replicaCount }}"
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
@@ -135,6 +137,9 @@ spec:
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
         - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
         - "--mode=kubernetes"
+        - "--port"
+        - "{{ .Values.ports.apiPort }}"
+        - "--listen-address=0.0.0.0"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsUser: 0
