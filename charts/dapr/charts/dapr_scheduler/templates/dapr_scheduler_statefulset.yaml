@@ -140,6 +140,9 @@ spec:
         - "--port"
         - "{{ .Values.ports.apiPort }}"
         - "--listen-address=0.0.0.0"
+{{- if eq .Values.global.actors.enabled true }}
+        - "--placement-address=dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50005"
+{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsUser: 0

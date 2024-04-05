@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/summary"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +43,10 @@ const (
 	// Target for the QPS.
 	// Measured with 3 and 5 replicas of scheduler service.
 	// If you run with only 1 replica, the QPS is much higher.
-	targetQPS = 1500
+	targetRegisterQPS = 1500
+
+	// Trigger QPS expected in aggregate of 1k reminders firing ev 1s.
+	targetTriggerQPS = 800
 )
 
 var tr *runner.TestRunner
@@ -164,17 +169,10 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.True(t, daprResult.ActualQPS > targetQPS)
+	assert.True(t, daprResult.ActualQPS > targetRegisterQPS)
 }
 
 func TestActorReminderTriggerPerformance(t *testing.T) {
-	p := perf.Params(
-		perf.WithQPS(2000),
-		perf.WithConnections(8),
-		perf.WithDuration("1m"),
-		perf.WithPayload("{}"),
-	)
-
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
@@ -184,77 +182,41 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
-	// Perform dapr test
-	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorType)
-	p.TargetEndpoint = endpoint
-	p.Payload = `{"dueTime":"24h","period":"24h","ttl":"90s"}` // So reminders don't fire and test only registration.
-	body, err := json.Marshal(&p)
-	require.NoError(t, err)
+	t.Logf("Registering reminders ...")
+	numReminders := 1000
+	reminderBody := []byte("{\"data\":\"reminderdata\",\"period\": \"1s\",\"ttl\":\"90s\"}")
+	for numReminders > 0 {
+		numReminders--
+		daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/call/%v/%v/reminders/myreminder", testAppURL, actorType, uuid.New().String()), reminderBody)
 
-	t.Logf("running dapr test with params: %s", body)
-	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testAppURL), body)
-	t.Log("checking err...")
-	require.NoError(t, err)
-	require.NotEmpty(t, daprResp)
-	// fast fail if daprResp starts with error
-	require.False(t, strings.HasPrefix(string(daprResp), "error"))
-
-	// Wait for reminder to expire.
-	time.Sleep(90 * time.Second)
-
-	appUsage, err := tr.Platform.GetAppUsage(appName)
-	require.NoError(t, err)
-
-	sidecarUsage, err := tr.Platform.GetSidecarUsage(appName)
-	require.NoError(t, err)
-
-	restarts, err := tr.Platform.GetTotalRestarts(appName)
-	require.NoError(t, err)
-
-	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
-
-	var daprResult perf.TestResult
-	err = json.Unmarshal(daprResp, &daprResult)
-	require.NoErrorf(t, err, "Failed to unmarshal: %s", string(daprResp))
-
-	percentiles := map[int]string{2: "90th", 3: "99th"}
-
-	for k, v := range percentiles {
-		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
-		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
-	}
-	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, p.QPS)
-
-	report := perf.NewTestReport(
-		[]perf.TestResult{daprResult},
-		"Actor Reminder",
-		sidecarUsage,
-		appUsage)
-	report.SetTotalRestartCount(restarts)
-	err = utils.UploadAzureBlob(report)
-
-	if err != nil {
-		t.Error(err)
+		t.Log("checking err...")
+		require.NoError(t, err)
+		require.Empty(t, daprResp)
 	}
 
-	summary.ForTest(t).
-		Service(appName).
-		Client(appName).
-		CPU(appUsage.CPUm).
-		Memory(appUsage.MemoryMb).
-		SidecarCPU(sidecarUsage.CPUm).
-		SidecarMemory(sidecarUsage.MemoryMb).
-		Restarts(restarts).
-		ActualQPS(daprResult.ActualQPS).
-		Params(p).
-		OutputFortio(daprResult).
-		Flush()
+	// Reset counters to start counting all together
+	{
+		resp, err := utils.HTTPDelete(fmt.Sprintf("%s/counter", testAppURL))
 
-	assert.Equal(t, 0, daprResult.RetCodes.Num400)
-	assert.Equal(t, 0, daprResult.RetCodes.Num500)
-	assert.Equal(t, 0, restarts)
-	assert.True(t, daprResult.ActualQPS > targetQPS)
+		t.Log("checking err...")
+		require.NoError(t, err)
+		require.Equal(t, "0", string(resp))
+	}
+
+	// Wait for reminders to trigger.
+	time.Sleep(60 * time.Second)
+
+	// Now see how many times they triggered in aggregate.
+	{
+		resp, err := utils.HTTPGet(fmt.Sprintf("%s/counter", testAppURL))
+
+		t.Log("checking err...")
+		require.NoError(t, err)
+		require.NotEmpty(t, string(resp))
+
+		count, err := strconv.Atoi(string(resp))
+		require.NoError(t, err)
+
+		assert.True(t, count/60 >= targetTriggerQPS)
+	}
 }
