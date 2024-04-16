@@ -24,12 +24,9 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 	timeutils "github.com/dapr/kit/time"
 )
-
-func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 	// TODO(artursouza): Add authorization check between caller and request.
@@ -43,9 +40,17 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	if err != nil {
 		return nil, fmt.Errorf("error parsing due time: %w", err)
 	}
+
+	metadata := req.GetMetadata()
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	metadata["namespace"] = req.GetNamespace()
+	metadata["appID"] = req.GetAppId()
+
 	ttl, err := parseTTL(req.GetJob().GetTtl())
 	if err != nil {
-		return nil, fmt.Errorf("error parsing TTL: %w", err)
+		return nil, fmt.Errorf("error parsing TTL: %v", err)
 	}
 	expiration := time.Time{}
 	if ttl > 0 {
@@ -59,7 +64,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		StartTime:  startTime,
 		Expiration: expiration,
 		Payload:    req.GetJob().GetData(),
-		Metadata:   req.GetMetadata(),
+		Metadata:   metadata,
 	}
 
 	err = s.cron.AddJob(ctx, job)
@@ -72,9 +77,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 }
 
 func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (etcdcron.TriggerResult, error) {
-	jobName := req.JobName
 	metadata := req.Metadata
-	payload := req.Payload
 	actorType := metadata["actorType"]
 	actorID := metadata["actorId"]
 	reminderName := metadata["reminder"]
@@ -87,7 +90,7 @@ func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (e
 		contentType := metadata["content-type"]
 		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
 			WithActor(actorType, actorID).
-			WithData(payload.GetValue()).
+			WithData(req.Payload.GetValue()).
 			WithContentType(contentType)
 
 		res, err := s.actorRuntime.Call(ctx, invokeReq)
@@ -102,10 +105,17 @@ func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (e
 		}
 
 		return etcdcron.OK, err
-	}
+	} else {
+		// Normal job type to trigger
+		triggeredJob := &schedulerv1pb.WatchJobsResponse{
+			Data:     req.Payload,
+			Metadata: metadata,
+		}
 
-	log.Warnf("Cannot trigger job: %v", jobName)
-	return etcdcron.Failure, nil
+		s.jobTriggerChan <- triggeredJob // send job to be consumed and sent to sidecar from WatchJobs()
+
+		return etcdcron.OK, nil
+	}
 }
 
 func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
@@ -193,4 +203,24 @@ func parseTTL(ttl string) (time.Duration, error) {
 	}
 
 	return time.Until(time.Now().AddDate(years, months, days).Add(period)), nil
+}
+
+// WatchJobs sends jobs to Dapr sidecars upon component changes.
+func (s *Server) WatchJobs(req *schedulerv1pb.WatchJobsRequest, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+	conn := &internal.Connection{
+		Namespace: req.GetNamespace(),
+		AppID:     req.GetAppId(),
+		Stream:    stream,
+	}
+
+	s.sidecarConnChan <- conn
+
+	select {
+	case <-s.closeCh:
+	case <-stream.Context().Done():
+	}
+
+	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.GetAppId())
+	s.connectionPool.Remove(req.GetNamespace(), req.GetAppId(), conn)
+	return nil
 }

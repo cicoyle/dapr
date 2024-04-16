@@ -23,17 +23,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -43,6 +46,7 @@ func init() {
 
 // notls tests scheduler can find quorum with tls disabled.
 type notls struct {
+	daprd      *daprd.Daprd
 	schedulers []*scheduler.Scheduler
 
 	jobName string
@@ -51,17 +55,18 @@ type notls struct {
 func (n *notls) Setup(t *testing.T) []framework.Option {
 	n.jobName = uuid.NewString()
 
-	fp := util.ReservePorts(t, 6)
+	fp := ports.Reserve(t, 6)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t, 3)),
-		"scheduler1=" + strconv.Itoa(fp.Port(t, 4)),
-		"scheduler2=" + strconv.Itoa(fp.Port(t, 5)),
+		"scheduler0=" + strconv.Itoa(fp.Port(t)),
+		"scheduler1=" + strconv.Itoa(fp.Port(t)),
+		"scheduler2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
@@ -69,9 +74,13 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
+	n.daprd = daprd.New(t,
+		daprd.WithSchedulerAddresses(n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()),
+	)
+
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2]),
+		framework.WithProcesses(fp, n.schedulers[0], n.schedulers[1], n.schedulers[2], n.daprd),
 	}
 }
 
@@ -79,6 +88,9 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.schedulers[0].WaitUntilRunning(t, ctx)
 	n.schedulers[1].WaitUntilRunning(t, ctx)
 	n.schedulers[2].WaitUntilRunning(t, ctx)
+
+	// this is needed since the scheduler streams the job at trigger time back to the sidecar
+	n.daprd.WaitUntilRunning(t, ctx)
 
 	// Schedule job to random scheduler instance
 	//nolint:gosec // there is no need for a crypto secure rand.
@@ -94,27 +106,36 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	client := schedulerv1pb.NewSchedulerClient(conn)
 
+	appID := n.daprd.AppID()
+
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     n.jobName,
-			Schedule: "@every 1s",
+			Schedule: "@every 10s", // Set to 10 so the job doesn't get cleaned up before I check for it in etcd
+			Repeats:  1,
+			Data: &anypb.Any{
+				TypeUrl: "type.googleapis.com/google.type.Expr",
+			},
 		},
 		Metadata: map[string]string{
-			"namespace": "default",
+			"namespace": n.daprd.Namespace(),
+			"appID":     appID,
 		},
+		Namespace: n.daprd.Namespace(),
+		AppId:     appID,
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
-	// Keep this, I believe the record is added to the db at trigger time, so I need the sleep for the db check to pass
-	time.Sleep(2 * time.Second) // allow time for the record to be added to the db
-
 	chosenSchedulerPort := chosenScheduler.EtcdClientPort()
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
-	chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-	checkKeysForAppID(t, n.jobName, chosenSchedulerEtcdKeys)
+	// Check if the job's key exists in the etcd database
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
+		checkKeysForJobName(t, n.jobName, chosenSchedulerEtcdKeys)
+	}, time.Second*3, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
 	for i := 0; i < 3; i++ {
@@ -123,15 +144,17 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		diffSchedulerPort := diffScheduler.EtcdClientPort()
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
-		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-		checkKeysForAppID(t, n.jobName, diffSchedulerEtcdKeys)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
+			checkKeysForJobName(t, n.jobName, diffSchedulerEtcdKeys)
+		}, time.Second*3, time.Millisecond*10, "failed to find job's key in etcd")
 	}
 }
 
-func checkKeysForAppID(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
+func checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
 	found := false
 	for _, kv := range keys {
-		if strings.HasSuffix(string(kv.Key), jobName) {
+		if strings.HasSuffix(string(kv.Key), "etcd_cron/partitions/0/jobs/"+jobName) {
 			found = true
 			break
 		}

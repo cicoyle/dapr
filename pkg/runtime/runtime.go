@@ -45,8 +45,8 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -55,14 +55,15 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/httpendpoint"
+	"github.com/dapr/dapr/pkg/internal/loader"
+	"github.com/dapr/dapr/pkg/internal/loader/disk"
+	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -71,10 +72,11 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -103,7 +105,7 @@ type DaprRuntime struct {
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
-	schedulerClient     schedulerv1pb.SchedulerClient
+	schedulerManager    *runtimeScheduler.Manager
 	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
@@ -158,21 +160,10 @@ func newDaprRuntime(ctx context.Context,
 		return nil, err
 	}
 
-	var schedClient schedulerv1pb.SchedulerClient
-	if runtimeConfig.SchedulerEnabled() {
-		schedClient, err = schedulerclient.New(ctx, runtimeConfig.schedulerAddress, sec)
-		if err != nil {
-			return nil, fmt.Errorf("error creating scheduler client: %w", err)
-		}
-
-		log.Infof("Scheduler client initialized")
-	}
-
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
-		Namespace:    namespace,
 		GlobalConfig: globalConfig,
 	})
 
@@ -222,7 +213,6 @@ func newDaprRuntime(ctx context.Context,
 		compStore:         compStore,
 		meta:              meta,
 		operatorClient:    operatorClient,
-		schedulerClient:   schedClient,
 		channels:          channels,
 		sec:               sec,
 		processor:         processor,
@@ -303,13 +293,29 @@ func newDaprRuntime(ctx context.Context,
 		}
 	}
 
+	var schedulerManager *runtimeScheduler.Manager
+	if runtimeConfig.SchedulerEnabled() {
+		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Options{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Addresses: runtimeConfig.schedulerAddress,
+			Security:  sec,
+		})
+		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
+			return nil, err
+		}
+		if schedulerManager != nil {
+			rt.schedulerManager = schedulerManager
+		}
+	}
+
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
 			log.Info("Dapr is shutting down")
 			comps := rt.compStore.ListComponents()
 			errCh := make(chan error)
 			for _, comp := range comps {
-				go func(comp componentsV1alpha1.Component) {
+				go func(comp compapi.Component) {
 					log.Infof("Shutting down component %s", comp.LogName())
 					errCh <- rt.processor.Close(comp)
 				}(comp)
@@ -508,9 +514,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
+	a.namespace = security.CurrentNamespace()
+
 	// Create and start the external gRPC server
 	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
+		Namespace:                   a.namespace,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
 		Resiliency:                  a.resiliency,
@@ -519,7 +528,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		SchedulerClient:             a.schedulerClient,
+		SchedulerManager:            a.schedulerManager,
 		WorkflowEngine:              wfe,
 	})
 
@@ -671,14 +680,14 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 		ComponentStore: a.compStore,
 		Meta:           a.meta,
 	})
-	if err := wfe.Init(ctx, wfengine.ComponentDefinition()); err != nil {
+	if err := wfe.Init(ctx, wfbackend.ComponentDefinition()); err != nil {
 		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
 	}
 
 	log.Info("Workflow engine initialized.")
 
 	return a.runnerCloser.AddCloser(func() error {
-		return wfe.Close(wfengine.ComponentDefinition())
+		return wfe.Close(wfbackend.ComponentDefinition())
 	})
 }
 
@@ -970,7 +979,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerAddress:  a.runtimeConfig.schedulerAddress,
+		SchedulerManager:  a.schedulerManager,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,
@@ -1004,24 +1013,29 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 }
 
 func (a *DaprRuntime) loadComponents(ctx context.Context) error {
-	var loader components.ComponentLoader
+	var loader loader.Loader[compapi.Component]
 
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
-		loader = components.NewKubernetesComponents(a.runtimeConfig.kubernetes, a.namespace, a.operatorClient, a.podName)
+		loader = kubernetes.NewComponents(kubernetes.Options{
+			Config:    a.runtimeConfig.kubernetes,
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
 	case modes.StandaloneMode:
-		loader = components.NewLocalComponents(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewComponents(a.runtimeConfig.standalone.ResourcesPath...)
 	default:
 		return nil
 	}
 
 	log.Info("Loading components…")
-	comps, err := loader.Load()
+	comps, err := loader.Load(ctx)
 	if err != nil {
 		return err
 	}
 
-	authorizedComps := a.authz.GetAuthorizedObjects(comps, a.authz.IsObjectAuthorized).([]componentsV1alpha1.Component)
+	authorizedComps := a.authz.GetAuthorizedObjects(comps, a.authz.IsObjectAuthorized).([]compapi.Component)
 
 	// Iterate through the list twice
 	// First, we look for secret stores and load those, then all other components
@@ -1050,7 +1064,7 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{})
+	a.processor.AddPendingEndpoint(ctx, endpointapi.HTTPEndpoint{})
 	log.Info("All outstanding http endpoints processed")
 }
 
@@ -1058,29 +1072,34 @@ func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{})
+	a.processor.AddPendingComponent(ctx, compapi.Component{})
 	log.Info("All outstanding components processed")
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
-	var loader httpendpoint.EndpointsLoader
+	var loader loader.Loader[endpointapi.HTTPEndpoint]
 
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
-		loader = httpendpoint.NewKubernetesHTTPEndpoints(a.runtimeConfig.kubernetes, a.namespace, a.operatorClient, a.podName)
+		loader = kubernetes.NewHTTPEndpoints(kubernetes.Options{
+			Config:    a.runtimeConfig.kubernetes,
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
 	case modes.StandaloneMode:
-		loader = httpendpoint.NewLocalHTTPEndpoints(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewHTTPEndpoints(a.runtimeConfig.standalone.ResourcesPath...)
 	default:
 		return nil
 	}
 
 	log.Info("Loading endpoints…")
-	endpoints, err := loader.LoadHTTPEndpoints()
+	endpoints, err := loader.Load(ctx)
 	if err != nil {
 		return err
 	}
 
-	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]httpEndpointV1alpha1.HTTPEndpoint)
+	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]endpointapi.HTTPEndpoint)
 
 	for _, e := range authorizedHTTPEndpoints {
 		log.Infof("Found http endpoint: %s", e.Name)
@@ -1200,11 +1219,11 @@ func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
 		// Preload Kubernetes secretstore
-		a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{
+		a.processor.AddPendingComponent(ctx, compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
-			Spec: componentsV1alpha1.ComponentSpec{
+			Spec: compapi.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: components.FirstStableVersion,
 			},

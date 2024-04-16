@@ -50,7 +50,7 @@ func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 	e.scheduler = scheduler.New(t)
 
 	e.daprd = daprd.New(t,
-		daprd.WithSchedulerAddress(e.scheduler.Address()),
+		daprd.WithSchedulerAddresses(e.scheduler.Address()),
 	)
 
 	return []framework.Option{
@@ -264,7 +264,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
-
+		defer resp.Body.Close()
 		// Deleting an unknown key is a success in etcd.
 		require.Equal(t, http.StatusNoContent, resp.StatusCode)
 	})

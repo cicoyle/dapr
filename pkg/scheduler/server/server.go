@@ -22,15 +22,15 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	etcdcron "github.com/diagridio/go-etcd-cron"
+	etcdcron_partitioning "github.com/diagridio/go-etcd-cron/partitioning"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
-
-	etcdcron "github.com/diagridio/go-etcd-cron"
-	etcdcron_partitioning "github.com/diagridio/go-etcd-cron/partitioning"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/config"
@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -70,17 +71,16 @@ type Options struct {
 	AppID            string
 	HostAddress      string
 	ListenAddress    string
+	PlacementAddress string
+	Mode             modes.DaprMode
+	Port             int
+	Security         security.Handler
+	ReplicaCount     int
+
 	DataDir          string
 	EtcdID           string
 	EtcdInitialPeers []string
 	EtcdClientPorts  []string
-	Mode             modes.DaprMode
-	Port             int
-	ReplicaCount     int
-
-	Security security.Handler
-
-	PlacementAddress string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -97,6 +97,12 @@ type Server struct {
 	etcdClientPorts  map[string]string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
+	jobTriggerChan   chan *schedulerv1pb.WatchJobsResponse // used to trigger the WatchJobs logic
+	jobWatcherWG     sync.WaitGroup
+
+	sidecarConnChan chan *internal.Connection
+	connectionPool  *internal.Pool // Connection pool for sidecars
+	closeCh         chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
@@ -126,6 +132,14 @@ func New(opts Options) *Server {
 		etcdClientPorts:  clientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
+		jobTriggerChan:   make(chan *schedulerv1pb.WatchJobsResponse),
+		jobWatcherWG:     sync.WaitGroup{},
+
+		sidecarConnChan: make(chan *internal.Connection),
+		connectionPool: &internal.Pool{
+			NsAppIDPool: make(map[string]*internal.AppIDPool),
+		},
+		closeCh: make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
@@ -180,6 +194,12 @@ func (s *Server) Run(ctx context.Context) error {
 	return concurrency.NewRunnerManager(
 		s.runServer,
 		s.runEtcdCron,
+		s.runJobWatcher,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(s.closeCh)
+			return nil
+		},
 	).Run(ctx)
 }
 
@@ -321,6 +341,81 @@ func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []
 		clientEndpoints = append(clientEndpoints, updatedURL)
 	}
 	return clientEndpoints
+}
+
+// runJobWatcher (dynamically) watches for (client) sidecar connections and adds them to the connection pool.
+func (s *Server) runJobWatcher(ctx context.Context) error {
+	log.Infof("Starting job watcher")
+
+	s.jobWatcherWG.Add(2)
+
+	// Goroutine for handling sidecar connections
+	go func() {
+		defer log.Info("Sidecar connections shutting down.")
+		defer s.jobWatcherWG.Done()
+		s.handleSidecarConnections(ctx)
+	}()
+
+	// Goroutine for handling job streaming at trigger time
+	go func() {
+		defer log.Info("Job streaming shutting down.")
+		defer s.jobWatcherWG.Done()
+		s.handleJobStreaming(ctx)
+	}()
+
+	<-ctx.Done()
+	s.jobWatcherWG.Wait()
+	log.Info("JobWatcher exited")
+	return ctx.Err()
+}
+
+// handleJobStreaming handles the streaming of jobs to Dapr sidecars.
+func (s *Server) handleJobStreaming(ctx context.Context) {
+	for {
+		select {
+		case job := <-s.jobTriggerChan:
+			// TODO(CASSIE): once the ns + appID is sent back on the triggerJob,
+			// dont use metadata to lookup those fields
+
+			metadata := job.GetMetadata()
+			appID := metadata["appID"]
+			namespace := metadata["namespace"]
+
+			// Pick a stream corresponding to the appID
+			stream, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace, appID)
+			if err != nil {
+				log.Debugf("Error getting stream for appID: %v", err)
+				// TODO: add job to a queue or something to try later
+				// this should be another long running go routine that accepts this job on a channel
+				continue
+			}
+
+			// Send the job update to the sidecar
+			if err := stream.Send(job); err != nil {
+				log.Warnf("Error sending job at trigger time: %v", err)
+				// TODO: add job to a queue or something to try later
+				// this should be another long running go routine that accepts this job on a channel
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// handleSidecarConnections handles the (client) sidecar connections and adds them to the connection pool.
+func (s *Server) handleSidecarConnections(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			s.connectionPool.Cleanup()
+			return
+		case conn := <-s.sidecarConnChan:
+			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.", conn.AppID)
+
+			// Add sidecar connection details to the connection pool
+			s.connectionPool.Add(conn.Namespace, conn.AppID, conn)
+		}
+	}
 }
 
 func extractNumberIdFromName(input string) (int, error) {

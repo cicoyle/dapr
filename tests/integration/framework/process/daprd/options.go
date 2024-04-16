@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
 // Option is a function that configures the dapr process.
@@ -58,7 +59,8 @@ type options struct {
 	disableK8sSecretStore   *bool
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
-	schedulerAddress        *string
+	controlPlaneTrustDomain *string
+	schedulerAddresses      []string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -227,9 +229,9 @@ func WithPlacementAddresses(addresses ...string) Option {
 	}
 }
 
-func WithSchedulerAddress(address string) Option {
+func WithSchedulerAddresses(addresses ...string) Option {
 	return func(o *options) {
-		o.schedulerAddress = &address
+		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
 	}
 }
 
@@ -279,4 +281,16 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 	return func(o *options) {
 		o.blockShutdownDuration = &duration
 	}
+}
+
+func WithControlPlaneTrustDomain(trustDomain string) Option {
+	return func(o *options) {
+		o.controlPlaneTrustDomain = &trustDomain
+	}
+}
+
+func WithSocket(t *testing.T, socket *socket.Socket) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_COMPONENTS_SOCKETS_FOLDER", socket.Directory(),
+	))
 }
