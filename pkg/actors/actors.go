@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/placement"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -209,17 +210,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		}
 		a.placement = factory(providerOpts)
 	}
-
-	factory, err := opts.Config.GetRemindersProvider(a.placement)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
-	}
-	a.actorsReminders = factory(providerOpts)
-
-	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
-	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
-	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
-
 	a.placement.SetHaltActorFns(a.haltActor, a.haltAllActors)
 	a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
 		a.apiLevel.Store(apiLevel)
@@ -230,6 +220,19 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	if opts.Config.SchedulerManager != nil {
 		log.Info("Using Scheduler service for reminders.")
+		// We want to delete "a.actorsReminders" once we move to scheduler service.
+		a.actorsReminders = reminders.NoOpReminders()
+		a.schedulerManager = opts.Config.SchedulerManager
+	} else {
+		factory, err := opts.Config.GetRemindersProvider(a.placement)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
+		}
+		a.actorsReminders = factory(providerOpts)
+
+		a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
+		a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
+		a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
 	}
 
 	return a, nil
@@ -540,6 +543,15 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 	// Do a lookup to check if the actor is local
 	actor := req.GetActor()
 	actorType := actor.GetActorType()
+	actorNamespace := a.actorsConfig.Config.Namespace
+	metadata := req.GetMetadata()
+	if metadata != nil {
+		if values, ok := metadata["namespace"]; ok {
+			if len(values.Values) > 0 {
+				actorNamespace = values.Values[0]
+			}
+		}
+	}
 	lar, err := a.placement.LookupActor(ctx, placement.LookupActorRequest{
 		ActorType: actorType,
 		ActorID:   actor.GetActorId(),
@@ -557,7 +569,8 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 			res, err = a.callLocalActor(ctx, req)
 		}
 	} else {
-		res, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, lar.Address, lar.AppID, req)
+		res, err = a.callRemoteActorWithRetry(
+			ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, actorNamespace, lar.Address, lar.AppID, req)
 	}
 
 	if err != nil {
@@ -574,14 +587,14 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	ctx context.Context,
 	numRetries int,
 	backoffInterval time.Duration,
-	fn func(ctx context.Context, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error),
-	targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest,
+	fn func(ctx context.Context, namespace, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error),
+	namespace, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest,
 ) (*internalv1pb.InternalInvokeResponse, error) {
 	if !a.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries))
 		return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			attempt := resiliency.GetAttempt(ctx)
-			rResp, teardown, rErr := fn(ctx, targetAddress, targetID, req)
+			rResp, teardown, rErr := fn(ctx, namespace, targetAddress, targetID, req)
 			if rErr == nil {
 				teardown(false)
 				return rResp, nil
@@ -599,7 +612,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		})
 	}
 
-	res, teardown, err := fn(ctx, targetAddress, targetID, req)
+	res, teardown, err := fn(ctx, namespace, targetAddress, targetID, req)
 	teardown(false)
 	return res, err
 }
@@ -807,10 +820,10 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 
 func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
-	targetAddress, targetID string,
+	namespace, targetAddress, targetID string,
 	req *internalv1pb.InternalInvokeRequest,
 ) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error) {
-	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.actorsConfig.Config.Namespace)
+	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, namespace)
 	if err != nil {
 		return nil, teardown, err
 	}
@@ -1182,25 +1195,8 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+	log.Infof("Using Scheduler service for reminders? %v", a.schedulerManager != nil)
 	if a.schedulerManager != nil {
-		metadata := map[string]string{
-			"scope":        "actor",
-			"namespace":    a.actorsConfig.Namespace,
-			"appId":        a.actorsConfig.AppID,
-			"actorType":    req.ActorType,
-			"actorId":      req.ActorID,
-			"reminder":     req.Name,
-			"content-type": "application/json",
-		}
-
-		jobName := constructCompositeKey(
-			a.actorsConfig.Namespace,
-			"reminder",
-			req.ActorType,
-			req.ActorID,
-			req.Name,
-		)
-
 		data, err := req.Data.MarshalJSON()
 		if err != nil {
 			return err
@@ -1208,7 +1204,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:     jobName,
+				Name:     req.Name,
 				Schedule: "@every " + req.Period,
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
@@ -1217,7 +1213,15 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 				DueTime: req.DueTime,
 				Ttl:     req.TTL,
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{
+				"scope":        "namespace",
+				"actorType":    req.ActorType,
+				"actorID":      req.ActorID,
+				"reminder":     req.Name,
+				"content-type": "application/json",
+			},
+			Namespace: a.actorsConfig.Namespace,
+			AppId:     a.actorsConfig.AppID,
 		}
 
 		_, err = a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
@@ -1251,34 +1255,25 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
+		return ErrReminderOpActorNotHosted
+	}
+
 	if a.schedulerManager != nil {
-		metadata := map[string]string{
-			"scope":     "actor",
-			"namespace": a.actorsConfig.Namespace,
-			"appId":     a.actorsConfig.AppID,
-			"actorType": req.ActorType,
-			"actorId":   req.ActorID,
-		}
-
-		jobName := constructCompositeKey(
-			a.actorsConfig.Namespace,
-			"reminder",
-			req.ActorType,
-			req.ActorID,
-			req.Name,
-		)
-
 		internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
-			JobName:  jobName,
-			Metadata: metadata,
+			JobName: req.Name,
+			Metadata: map[string]string{
+				"scope":     "namespace",
+				"actorType": req.ActorType,
+				"actorID":   req.ActorID,
+				"reminder":  req.Name,
+			},
+			Namespace: a.actorsConfig.Namespace,
+			AppId:     a.actorsConfig.AppID,
 		}
 
 		_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
 		return err
-	}
-
-	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
-		return ErrReminderOpActorNotHosted
 	}
 
 	return a.actorsReminders.DeleteReminder(ctx, *req)
@@ -1287,6 +1282,41 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error) {
 	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
 		return nil, ErrReminderOpActorNotHosted
+	}
+
+	if a.schedulerManager != nil {
+		schedulerGetJobRequest := &schedulerv1pb.GetJobRequest{
+			JobName: req.Name,
+			Metadata: map[string]string{
+				"scope":     "namespace",
+				"actorType": req.ActorType,
+				"actorID":   req.ActorID,
+			},
+			Namespace: a.actorsConfig.Namespace,
+			AppId:     a.actorsConfig.AppID,
+		}
+
+		res, err := a.schedulerManager.NextClient().GetJob(ctx, schedulerGetJobRequest)
+		if err != nil {
+			return nil, err
+		}
+
+		scheduleParts := strings.Split(res.Job.Schedule, " ")
+		if len(scheduleParts) != 2 {
+			return nil, fmt.Errorf("invalid job schedule: " + res.Job.Schedule)
+		}
+		period, err := internal.NewReminderPeriod(scheduleParts[1])
+		if err != nil {
+			return nil, err
+		}
+
+		return &internal.Reminder{
+			ActorID:   req.ActorID,
+			ActorType: req.ActorType,
+			Name:      req.Name,
+			Data:      res.Job.Data.Value,
+			Period:    period,
+		}, nil
 	}
 
 	return a.actorsReminders.GetReminder(ctx, req)

@@ -40,13 +40,17 @@ const (
 	actorType       = "PerfTestActorReminder"
 	appName         = "perf-actor-reminder-service"
 
+	// Number between 0 and 1 representing the actual QPS ratio to the target QPS.
+	minRelativeQPS = float64(0.98)
+
 	// Target for the QPS.
-	// Measured with 3 and 5 replicas of scheduler service.
+	// Calibrated with 3 and 5 replicas of scheduler service.
 	// If you run with only 1 replica, the QPS is much higher.
 	targetRegisterQPS = 1500
 
-	// Trigger QPS expected in aggregate of 1k reminders firing ev 1s.
-	targetTriggerQPS = 800
+	// Trigger QPS expected in aggregate of reminders firing ev 1s.
+	// Calibrated with 3 replicas of scheduler service.
+	targetTriggerQPS = 520
 )
 
 var tr *runner.TestRunner
@@ -82,7 +86,7 @@ func TestMain(m *testing.M) {
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params(
-		perf.WithQPS(2000),
+		perf.WithQPS(targetRegisterQPS),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
@@ -169,7 +173,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.True(t, daprResult.ActualQPS > targetRegisterQPS)
+	assert.GreaterOrEqual(t, daprResult.ActualQPS, targetRegisterQPS*minRelativeQPS)
 }
 
 func TestActorReminderTriggerPerformance(t *testing.T) {
@@ -183,7 +187,8 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Logf("Registering reminders ...")
-	numReminders := 1000
+	// Each reminder should fire at 1 qps
+	numReminders := targetTriggerQPS
 	reminderBody := []byte("{\"data\":\"reminderdata\",\"period\": \"1s\",\"ttl\":\"90s\"}")
 	for numReminders > 0 {
 		numReminders--
@@ -217,6 +222,6 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		count, err := strconv.Atoi(string(resp))
 		require.NoError(t, err)
 
-		assert.True(t, count/60 >= targetTriggerQPS)
+		assert.GreaterOrEqual(t, float64(count/60.0), targetTriggerQPS*minRelativeQPS)
 	}
 }

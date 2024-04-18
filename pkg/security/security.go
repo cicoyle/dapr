@@ -311,7 +311,7 @@ func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.D
 	expID := "/ns/" + ns + "/" + appID
 	matcher := func(actual spiffeid.ID) error {
 		if actual.Path() != expID {
-			return fmt.Errorf("unexpected SPIFFE ID: %q", actual)
+			return fmt.Errorf("unexpected SPIFFE ID: %q instead of %q", actual, expID)
 		}
 		return nil
 	}

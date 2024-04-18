@@ -45,20 +45,18 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
 	}
 
-	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetJob().GetName()
-
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name:     jobName,
+			Name:     inReq.GetJob().GetName(),
 			Schedule: inReq.GetJob().GetSchedule(),
 			Data:     inReq.GetJob().GetData(),
 			Repeats:  inReq.GetJob().GetRepeats(),
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		// TODO: add Metadata for lookup if using state store: this should generate key if jobStateStore is configured
 		Namespace: a.Namespace(),
 		AppId:     a.appID,
+		// TODO: add Metadata for lookup if using state store: this should generate key if jobStateStore is configured
 	}
 
 	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
@@ -81,12 +79,11 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
-		JobName: jobName,
-		// TODO: add Metadata for lookup if using state store
+		JobName:   inReq.GetName(),
 		Namespace: a.Namespace(),
 		AppId:     a.appID,
+		// TODO: add Metadata for lookup if using state store
 	}
 
 	_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
@@ -112,12 +109,11 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		return response, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
-		JobName: jobName,
-		// TODO: add Metadata for lookup if using state store
+		JobName:   inReq.GetName(),
 		Namespace: a.Namespace(),
 		AppId:     a.appID,
+		// TODO: add Metadata for lookup if using state store
 	}
 
 	internalResp, err := a.schedulerManager.NextClient().GetJob(ctx, internalGetJobReq)

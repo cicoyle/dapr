@@ -16,6 +16,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	etcdcron "github.com/diagridio/go-etcd-cron"
@@ -45,8 +46,6 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	if metadata == nil {
 		metadata = map[string]string{}
 	}
-	metadata["namespace"] = req.GetNamespace()
-	metadata["appID"] = req.GetAppId()
 
 	ttl, err := parseTTL(req.GetJob().GetTtl())
 	if err != nil {
@@ -57,8 +56,23 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		expiration = time.Now().Add(ttl)
 	}
 
+	fqn, err := (&jobFQN{
+		metadata:  req.GetMetadata(),
+		namespace: req.GetNamespace(),
+		appID:     req.GetAppId(),
+		jobName:   req.GetJob().GetName(),
+	}).toString()
+	if err != nil {
+		return nil, err
+	}
+
+	// This is required for trigger function to have full context.
+	// The job object does not have Dapr-specific attributes.
+	metadata["namespace"] = req.Namespace
+	metadata["appID"] = req.AppId
+
 	job := etcdcron.Job{
-		Name:       req.GetJob().GetName(),
+		Name:       fqn,
 		Rhythm:     req.GetJob().GetSchedule(),
 		Repeats:    req.GetJob().GetRepeats(),
 		StartTime:  startTime,
@@ -67,20 +81,27 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Metadata:   metadata,
 	}
 
+	log.Infof("Adding job %s", fqn)
 	err = s.cron.AddJob(ctx, job)
 	if err != nil {
-		log.Errorf("error scheduling job %s: %s", req.GetJob().GetName(), err)
+		log.Errorf("error scheduling job %s: %s", fqn, err)
 		return nil, err
 	}
+	log.Infof("Added job %s", fqn)
 
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
 func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (etcdcron.TriggerResult, error) {
+	fmt.Printf("Triggering job: %s\n", req.JobName)
 	metadata := req.Metadata
 	actorType := metadata["actorType"]
-	actorID := metadata["actorId"]
+	actorID := metadata["actorID"]
 	reminderName := metadata["reminder"]
+	triggerMetadata := map[string][]string{}
+	if req.Metadata["namespace"] != "" {
+		triggerMetadata["namespace"] = []string{req.Metadata["namespace"]}
+	}
 	if actorType != "" && actorID != "" && reminderName != "" {
 		if s.actorRuntime == nil {
 			return etcdcron.Failure, fmt.Errorf("actor runtime is not configured")
@@ -89,6 +110,7 @@ func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (e
 		invokeMethod := "remind/" + reminderName
 		contentType := metadata["content-type"]
 		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
+			WithMetadata(triggerMetadata).
 			WithActor(actorType, actorID).
 			WithData(req.Payload.GetValue()).
 			WithContentType(contentType)
@@ -126,10 +148,19 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 	case <-s.readyCh:
 	}
 
-	jobName := req.GetJobName()
-	err := s.cron.DeleteJob(ctx, jobName)
+	fqn, err := (&jobFQN{
+		metadata:  req.GetMetadata(),
+		namespace: req.GetNamespace(),
+		appID:     req.GetAppId(),
+		jobName:   req.GetJobName(),
+	}).toString()
 	if err != nil {
-		log.Errorf("error deleting job %s: %s", jobName, err)
+		return nil, err
+	}
+
+	err = s.cron.DeleteJob(ctx, fqn)
+	if err != nil {
+		log.Errorf("error deleting job %s: %s", fqn, err)
 		return nil, err
 	}
 
@@ -144,11 +175,22 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	case <-s.readyCh:
 	}
 
-	jobName := req.GetJobName()
-	// TODO(artursouza): Use "FetchJob()" to read from db instead of running jobs only - once method exists.
-	job := s.cron.GetJob(jobName)
+	fqn, err := (&jobFQN{
+		metadata:  req.GetMetadata(),
+		namespace: req.GetNamespace(),
+		appID:     req.GetAppId(),
+		jobName:   req.GetJobName(),
+	}).toString()
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := s.cron.FetchJob(ctx, fqn)
+	if err != nil {
+		return nil, err
+	}
 	if job == nil {
-		return nil, fmt.Errorf("job not found: %s", jobName)
+		return nil, fmt.Errorf("job not found: %s", fqn)
 	}
 
 	ttl := ""
@@ -163,7 +205,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 
 	return &schedulerv1pb.GetJobResponse{
 		Job: &runtime.Job{
-			Name:     jobName,
+			Name:     req.GetJobName(),
 			Schedule: job.Rhythm,
 			Repeats:  job.Repeats,
 			Ttl:      ttl,
@@ -223,4 +265,43 @@ func (s *Server) WatchJobs(req *schedulerv1pb.WatchJobsRequest, stream scheduler
 	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.GetAppId())
 	s.connectionPool.Remove(req.GetNamespace(), req.GetAppId(), conn)
 	return nil
+}
+
+type jobFQN struct {
+	metadata  map[string]string
+	namespace string
+	appID     string
+	jobName   string
+}
+
+// Composes the job's FQN that is used in the job store.
+func (j *jobFQN) toString() (string, error) {
+	scope := ""
+	actorType := ""
+	actorID := ""
+	reminderName := ""
+	if j.metadata != nil {
+		scope = j.metadata["scope"]
+		actorType = j.metadata["actorType"]
+		actorID = j.metadata["actorID"]
+		reminderName = j.metadata["reminder"]
+	}
+
+	appID := j.appID
+	if scope == "namespace" {
+		appID = "*"
+	}
+
+	if actorType != "" {
+		if actorID == "" {
+			return "", fmt.Errorf("actorID expected but not present in reminder")
+		}
+		if reminderName == "" {
+			return "", fmt.Errorf("reminder's name expected but not present in reminder")
+		}
+
+		return strings.Join([]string{j.namespace, appID, "reminder", actorType, actorID, reminderName}, "||"), nil
+	}
+
+	return strings.Join([]string{j.namespace, appID, "job", j.jobName}, "||"), nil
 }

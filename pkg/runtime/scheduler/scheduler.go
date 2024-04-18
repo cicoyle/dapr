@@ -16,8 +16,8 @@ package scheduler
 import (
 	"context"
 	"io"
+	"math/rand"
 	"strings"
-	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,10 +33,9 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 
 // Manager manages connections to multiple schedulers.
 type Manager struct {
-	clients     []*client.Client
-	namespace   string
-	appID       string
-	lastUsedIdx int64
+	clients   []*client.Client
+	namespace string
+	appID     string
 }
 
 type Options struct {
@@ -224,13 +223,12 @@ func (m *Manager) watchJobs(ctx context.Context, client *client.Client) error {
 
 // NextClient returns the next client in a round-robin manner.
 func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
-	// Check if there is only one client available
+	// Check if there is only one client available.
 	if len(m.clients) == 1 {
 		return m.clients[0].Scheduler
 	}
 
-	nextIdx := atomic.AddInt64(&m.lastUsedIdx, 1)
-	nextClient := m.clients[int(nextIdx)%len(m.clients)]
-
-	return nextClient.Scheduler
+	// Does not need to be crypto's rand.
+	nextIdx := rand.Intn(len(m.clients))
+	return m.clients[nextIdx].Scheduler
 }

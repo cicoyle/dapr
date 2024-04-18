@@ -246,11 +246,6 @@ func New(origArgs []string) (*Options, error) {
 		opts.DaprBlockShutdownDuration = nil
 	}
 
-	override := os.Getenv("SCHEDULER_ADDRESS")
-	if override != "" {
-		opts.SchedulerAddress = override
-	}
-
 	return &opts, nil
 }
 

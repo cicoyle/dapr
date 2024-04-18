@@ -292,6 +292,7 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 		etcdcron.WithErrorsHandler(func(ctx context.Context, j etcdcron.Job, err error) {
 			log.Errorf("error processing job %s: %v", j.Name, err)
 		}),
+		etcdcron.WithCompression(false),
 	)
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
