@@ -195,9 +195,8 @@ func (m *Manager) processStream(ctx context.Context, client *client.Client, stre
 						return err
 					}
 				}
-				// TODO(Cassie): rm this once it sends the triggered job back to the app
-				log.Infof("Received response: %+v %+v", resp.GetData(), resp.GetMetadata())
 
+				log.Debugf("Received job: %+v %+v", resp.GetData(), resp.GetMetadata())
 				err = m.invokeAppMethod(ctx, resp)
 				if err != nil {
 					log.Errorf("Error invoking app method: %v", err)
