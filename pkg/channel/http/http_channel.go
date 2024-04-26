@@ -169,11 +169,11 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	return nil, status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 }
 
-// TriggerJob sends the job back to the app via HTTP.
-func (h *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+// TriggerJob sends the triggered job back to the app via HTTP.
+func (h *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	// NOTE: Using invokeMethodReq for future extensibility on httpExt types based on (future) metadata
 	// passed in from the app
-	return h.sendJob(ctx, req, appID)
+	return h.sendJob(ctx, req)
 }
 
 func (h *Channel) constructJobRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
@@ -214,7 +214,7 @@ func (h *Channel) constructJobRequest(ctx context.Context, req *invokev1.InvokeM
 		channelReq.ContentLength = v
 	}
 
-	// HTTP client needs to inject traceparent header for proper tracing stack.
+	// HTTP client needs to inject trace parent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
 	if span.SpanContext().HasTraceID() {
 		tp := diag.SpanContextToW3CString(span.SpanContext())
@@ -233,9 +233,7 @@ func (h *Channel) constructJobRequest(ctx context.Context, req *invokev1.InvokeM
 	return channelReq, nil
 }
 
-// func (h *Channel) sendJob(ctx context.Context, data *anypb.Any, url, appID string) (*invokev1.InvokeMethodResponse, error) {
-func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
-	// TODO: I think I can rm the appID
+func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	channelReq, err := h.constructJobRequest(ctx, req)
 	if err != nil {
 		return nil, err

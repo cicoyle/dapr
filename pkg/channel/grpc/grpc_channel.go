@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"sync"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
@@ -86,8 +87,8 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	}
 }
 
-// TriggerJob invokes user code via gRPC.
-func (g *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+// TriggerJob sends the triggered job to the app via gRPC.
+func (g *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
@@ -137,9 +138,14 @@ func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}
 
+	invokeResp := &commonv1pb.InvokeResponse{
+		Data:        resp.GetData(),
+		ContentType: resp.GetContentType(),
+	}
+
 	rsp.WithHeaders(header).
 		WithTrailers(trailer).
-		WithMessage(resp)
+		WithMessage(invokeResp)
 
 	return rsp, nil
 }

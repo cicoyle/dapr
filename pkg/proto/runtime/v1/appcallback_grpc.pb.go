@@ -59,7 +59,7 @@ type AppCallbackClient interface {
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(ctx context.Context, in *BindingEventRequest, opts ...grpc.CallOption) (*BindingEventResponse, error)
 	// Sends job back to the app's endpoint at trigger time.
-	OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
+	OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error)
 }
 
 type appCallbackClient struct {
@@ -115,8 +115,8 @@ func (c *appCallbackClient) OnBindingEvent(ctx context.Context, in *BindingEvent
 	return out, nil
 }
 
-func (c *appCallbackClient) OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error) {
-	out := new(v1.InvokeResponse)
+func (c *appCallbackClient) OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error) {
+	out := new(JobEventResponse)
 	err := c.cc.Invoke(ctx, AppCallback_OnJobEvent_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ type AppCallbackServer interface {
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error)
 	// Sends job back to the app's endpoint at trigger time.
-	OnJobEvent(context.Context, *JobEventRequest) (*v1.InvokeResponse, error)
+	OnJobEvent(context.Context, *JobEventRequest) (*JobEventResponse, error)
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
@@ -164,7 +164,7 @@ func (UnimplementedAppCallbackServer) ListInputBindings(context.Context, *emptyp
 func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBindingEvent not implemented")
 }
-func (UnimplementedAppCallbackServer) OnJobEvent(context.Context, *JobEventRequest) (*v1.InvokeResponse, error) {
+func (UnimplementedAppCallbackServer) OnJobEvent(context.Context, *JobEventRequest) (*JobEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnJobEvent not implemented")
 }
 

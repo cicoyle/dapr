@@ -224,7 +224,7 @@ func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.Watch
 			return fmt.Errorf("app channel is nil. Cannot send back triggered job: %s", jobName)
 		}
 
-		response, err := m.appChannel.TriggerJob(ctx, req, m.appID)
+		response, err := m.appChannel.TriggerJob(ctx, req)
 		if response != nil {
 			defer response.Close()
 		}
@@ -256,7 +256,7 @@ func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.Watch
 			return fmt.Errorf("app channel is nil. Cannot send back triggered job: %s", jobName)
 		}
 
-		response, err := m.appChannel.TriggerJob(ctx, req, m.appID)
+		response, err := m.appChannel.TriggerJob(ctx, req)
 		if response != nil {
 			defer response.Close()
 		}
