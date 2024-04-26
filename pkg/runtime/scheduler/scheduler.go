@@ -21,11 +21,11 @@ import (
 	"strings"
 	"sync/atomic"
 
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/channel"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
@@ -212,7 +212,7 @@ func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.Watch
 
 	switch m.isHTTP {
 	case true:
-		req := v1.NewInvokeMethodRequest("watchJobs/"+jobName).
+		req := v1.NewInvokeMethodRequest("dapr/receiveJobs/"+jobName).
 			WithHTTPExtension(http.MethodPost, "").
 			WithDataObject(resp.GetData())
 		if req != nil {
@@ -224,7 +224,7 @@ func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.Watch
 			return fmt.Errorf("app channel is nil. Cannot send back triggered job: %s", jobName)
 		}
 
-		response, err := m.appChannel.InvokeMethod(ctx, req, m.appID)
+		response, err := m.appChannel.TriggerJob(ctx, req, m.appID)
 		if response != nil {
 			defer response.Close()
 		}
@@ -245,7 +245,7 @@ func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.Watch
 			log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", jobName, statusCode)
 		}
 	default:
-		req := v1.NewInvokeMethodRequest("watchJobs/" + jobName).
+		req := v1.NewInvokeMethodRequest("receiveJobs/" + jobName).
 			WithDataObject(resp.GetData())
 		if req != nil {
 			defer req.Close()
@@ -256,7 +256,7 @@ func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.Watch
 			return fmt.Errorf("app channel is nil. Cannot send back triggered job: %s", jobName)
 		}
 
-		response, err := m.appChannel.InvokeMethod(ctx, req, m.appID)
+		response, err := m.appChannel.TriggerJob(ctx, req, m.appID)
 		if response != nil {
 			defer response.Close()
 		}

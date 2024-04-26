@@ -86,6 +86,64 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	}
 }
 
+// TriggerJob invokes user code via gRPC.
+func (g *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+	}
+
+	return g.sendJob(ctx, req)
+}
+
+func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if g.ch != nil {
+		g.ch <- struct{}{}
+	}
+
+	// Read the request, including the data
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
+
+	var header, trailer grpcMetadata.MD
+	opts := []grpc.CallOption{
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
+	}
+
+	jobReq := &runtimev1pb.JobEventRequest{
+		Data:          pd.GetMessage().GetData(),
+		Method:        pd.GetMessage().GetMethod(),
+		ContentType:   pd.GetMessage().GetContentType(),
+		HttpExtension: pd.GetMessage().GetHttpExtension(),
+	}
+
+	resp, err := g.appCallbackClient.OnJobEvent(ctx, jobReq, opts...)
+
+	if g.ch != nil {
+		<-g.ch
+	}
+
+	var rsp *invokev1.InvokeMethodResponse
+	if err != nil {
+		// Convert status code
+		respStatus := status.Convert(err)
+		// Prepare response
+		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
+	} else {
+		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
+	}
+
+	rsp.WithHeaders(header).
+		WithTrailers(trailer).
+		WithMessage(resp)
+
+	return rsp, nil
+}
+
 // invokeMethodV1 calls user applications using daprclient v1.
 func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
@@ -115,7 +173,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
 	}
-
+	//client.OnTriggerJobEvent() in triggerJob
 	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.GetMessage(), opts...)
 
 	if g.ch != nil {
