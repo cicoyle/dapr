@@ -48,9 +48,7 @@ type jobData struct {
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.scheduler = scheduler.New(t,
-		scheduler.WithLogLevel("debug"),
-	)
+	g.scheduler = scheduler.New(t)
 
 	g.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
@@ -119,8 +117,8 @@ func (g *grpc) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.
 		decodedValue, err := base64.StdEncoding.DecodeString(data.Value)
 		require.NoError(t, err)
 
-		expectedVal := strings.TrimSpace(string(decodedValue))
-		assert.Equal(t, expectedVal, `{"expression": "val"}`)
+		actualVal := strings.TrimSpace(string(decodedValue))
+		assert.Equal(t, `{"expression": "val"}`, actualVal)
 
 	case <-time.After(time.Second * 3):
 		assert.Fail(t, "timed out waiting for triggered job")

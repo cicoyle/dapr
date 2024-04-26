@@ -15,16 +15,12 @@ package appcallback
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -43,36 +39,29 @@ func init() {
 type httpcallback struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
-	//jobChan   chan *runtimev1pb.JobEventRequest
-
-	jobChan chan *commonv1pb.InvokeRequest
+	jobChan   chan *runtimev1pb.JobEventRequest
 }
 
 func (h *httpcallback) Setup(t *testing.T) []framework.Option {
 	h.scheduler = scheduler.New(t)
 
-	//h.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
-	h.jobChan = make(chan *commonv1pb.InvokeRequest, 1)
+	h.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
 		app.WithHandlerFunc("/dapr/receiveJobs/test", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
-			//_, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, "Error reading request body", http.StatusInternalServerError)
 				return
 			}
 
-			fmt.Printf("CASSIE in handler func. Body: %+v", r.Body)
-			invokeRequest := &commonv1pb.InvokeRequest{
-				Method: "/dapr/receiveJobs/test",
-				Data: &anypb.Any{
-					TypeUrl: "type.googleapis.com/google.type.Expr",
-					Value:   body,
-				},
+			var jobEventRequest runtimev1pb.JobEventRequest
+			if err := json.Unmarshal(body, &jobEventRequest.Data); err != nil {
+				http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+				return
 			}
-			
-			h.jobChan <- invokeRequest
-			//h.jobChan <- &jobEventRequest
+			jobEventRequest.Method = r.URL.String()
+			h.jobChan <- &jobEventRequest
+
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
@@ -81,7 +70,6 @@ func (h *httpcallback) Setup(t *testing.T) []framework.Option {
 		daprd.WithSchedulerAddresses(h.scheduler.Address()),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
-		daprd.WithLogLevel("debug"),
 	)
 
 	return []framework.Option{
@@ -120,23 +108,11 @@ func (h *httpcallback) receiveJob(t *testing.T, ctx context.Context, client runt
 
 	select {
 	case job := <-h.jobChan:
-		fmt.Printf("\n\nGOT JOB: %+v", job)
-
 		assert.NotNil(t, job)
-		assert.Equal(t, job.GetMethod(), "/dapr/receiveJobs/test")
-
-		var data jobData
-		dataBytes := job.GetData().GetValue()
-
-		err := json.Unmarshal(dataBytes, &data)
-		require.NoError(t, err)
-
-		decodedValue, err := base64.StdEncoding.DecodeString(data.Value)
-		require.NoError(t, err)
-
-		expectedVal := strings.TrimSpace(string(decodedValue))
-		assert.Equal(t, expectedVal, `{"expression": "val"}`)
-		fmt.Printf("Decoded value: %s", strings.TrimSpace(string(decodedValue)))
+		assert.NotNil(t, job.GetData())
+		assert.Equal(t, "/dapr/receiveJobs/test", job.GetMethod())
+		assert.Equal(t, `{"expression": "val"}`, string(job.GetData().GetValue()))
+		assert.Equal(t, "type.googleapis.com/google.type.Expr", job.GetData().GetTypeUrl())
 
 	case <-time.After(time.Second * 3):
 		assert.Fail(t, "timed out waiting for triggered job")
