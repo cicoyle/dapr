@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -40,7 +39,7 @@ func init() {
 type grpc struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
-	jobChan   chan *commonv1pb.InvokeRequest
+	jobChan   chan *runtimev1pb.JobEventRequest
 }
 
 type jobData struct {
@@ -53,11 +52,11 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		scheduler.WithLogLevel("debug"),
 	)
 
-	g.jobChan = make(chan *commonv1pb.InvokeRequest, 1)
+	g.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
-		app.WithOnInvokeFn(func(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
+		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 			g.jobChan <- in
-			return &commonv1pb.InvokeResponse{
+			return &runtimev1pb.JobEventResponse{
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 					Value:   []byte(`{"expression": "val"}`),
@@ -109,7 +108,7 @@ func (g *grpc) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.
 	select {
 	case job := <-g.jobChan:
 		assert.NotNil(t, job)
-		assert.Equal(t, job.GetMethod(), "watchJobs/test")
+		assert.Equal(t, job.GetMethod(), "receiveJobs/test")
 
 		var data jobData
 		dataBytes := job.GetData().GetValue()
