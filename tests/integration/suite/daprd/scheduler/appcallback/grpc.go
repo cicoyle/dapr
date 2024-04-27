@@ -21,15 +21,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func init() {
@@ -83,7 +84,6 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	t.Run("app receives triggered job", func(t *testing.T) {
 		g.receiveJob(t, ctx, client)
 	})
-
 }
 
 func (g *grpc) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient) {

@@ -21,11 +21,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/channel"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"

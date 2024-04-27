@@ -68,6 +68,7 @@ func WithOnJobEventFn(fn func(ctx context.Context, in *rtv1.JobEventRequest) (*r
 		opts.onJobEventFn = fn
 	}
 }
+
 func WithListTopicSubscriptions(fn func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.listTopicSubFn = fn
