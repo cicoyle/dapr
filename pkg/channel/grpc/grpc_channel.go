@@ -156,6 +156,12 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		g.ch <- struct{}{}
 	}
 
+	defer func() {
+		if g.ch != nil {
+			<-g.ch
+		}
+	}()
+
 	// Read the request, including the data
 	pd, err := req.ProtoWithData()
 	if err != nil {
@@ -179,7 +185,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
 	}
-	//client.OnTriggerJobEvent() in triggerJob
+
 	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.GetMessage(), opts...)
 
 	if g.ch != nil {
