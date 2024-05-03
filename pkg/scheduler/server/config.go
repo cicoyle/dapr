@@ -22,22 +22,32 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/security"
 )
 
-func (s *Server) conf() *embed.Config {
+func config(opts Options) (*embed.Config, error) {
+	clientPorts := make(map[string]string)
+	for _, input := range opts.EtcdClientPorts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			return nil, fmt.Errorf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		clientPorts[schedulerID] = port
+	}
+
 	config := embed.NewConfig()
 
-	config.Name = s.id
-	config.Dir = s.dataDir + "-" + security.CurrentNamespace() + "-" + s.id
-	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
-	config.QuotaBackendBytes = s.etcdSpaceQuota
-	config.AutoCompactionMode = s.etcdCompactionMode
-	config.AutoCompactionRetention = s.etcdCompactionRetention
+	config.QuotaBackendBytes = opts.EtcdSpaceQuota
+	config.AutoCompactionMode = opts.EtcdCompactionMode
+	config.AutoCompactionRetention = opts.EtcdCompactionRetention
+	config.Name = opts.EtcdID
+	config.Dir = opts.DataDir
+	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
 
-	etcdURL, peerPort, err := peerHostAndPort(s.id, s.etcdInitialPeers)
+	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {
-		log.Warnf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL")
+		return nil, err
 	}
 
 	config.AdvertisePeerUrls = []url.URL{{
@@ -47,10 +57,10 @@ func (s *Server) conf() *embed.Config {
 
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.id]),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 	}}
 
-	switch s.mode {
+	switch opts.Mode {
 	// can't use domain name for k8s for config.ListenPeerUrls && config.ListenClientUrls
 	case modes.KubernetesMode:
 		etcdIP := "0.0.0.0"
@@ -60,14 +70,8 @@ func (s *Server) conf() *embed.Config {
 		}}
 		config.ListenClientUrls = []url.URL{{
 			Scheme: "http",
-			Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientPorts[s.id]),
+			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
-		if len(s.etcdClientHttpPorts) > 0 {
-			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientHttpPorts[s.id]),
-			}}
-		}
 	default:
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
@@ -75,14 +79,8 @@ func (s *Server) conf() *embed.Config {
 		}}
 		config.ListenClientUrls = []url.URL{{
 			Scheme: "http",
-			Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.id]),
+			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
-		if len(s.etcdClientHttpPorts) > 0 {
-			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientHttpPorts[s.id]),
-			}}
-		}
 	}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
@@ -92,23 +90,21 @@ func (s *Server) conf() *embed.Config {
 	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
 	// TODO: Cassie do extra validation to ensure that the list of ids sent in for the clientPort == list of ids from initial cluster
 
-	return config
+	return config, nil
 }
 
 func peerHostAndPort(name string, initialCluster []string) (string, string, error) {
 	for _, scheduler := range initialCluster {
 		idAndAddress := strings.SplitN(scheduler, "=", 2)
 		if len(idAndAddress) != 2 {
-			log.Warnf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
-			continue
+			return "", "", fmt.Errorf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
 		}
 
 		id := strings.TrimPrefix(idAndAddress[0], "http://")
 		if id == name {
 			address, err := url.Parse(idAndAddress[1])
 			if err != nil {
-				log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
-				continue
+				return "", "", fmt.Errorf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
 			}
 
 			host, port, err := net.SplitHostPort(address.Host)
