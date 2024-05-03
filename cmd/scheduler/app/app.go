@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/signals"
@@ -37,11 +36,14 @@ var log = logger.NewLogger("dapr.scheduler")
 const appID = "dapr-scheduler"
 
 func Run() {
-	opts := options.New(os.Args[1:])
+	opts, err := options.New(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
+	if lerr := logger.ApplyOptionsToLoggers(&opts.Logger); lerr != nil {
+		log.Fatal(lerr)
 	}
 
 	log.Infof("Starting Dapr Scheduler Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
@@ -49,9 +51,8 @@ func Run() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	err := monitoring.InitMetrics()
-	if err != nil {
-		log.Fatal(err)
+	if merr := monitoring.InitMetrics(); merr != nil {
+		log.Fatal(merr)
 	}
 
 	ctx := signals.Context()
@@ -68,11 +69,6 @@ func Run() {
 		log.Fatal(err)
 	}
 
-	hostAddress, err := utils.GetHostAddress()
-	if err != nil {
-		log.Fatal(fmt.Errorf("failed to determine host address: %w", err))
-	}
-
 	err = concurrency.NewRunnerManager(
 		metricsExporter.Run,
 		secProvider.Run,
@@ -82,24 +78,26 @@ func Run() {
 				return serr
 			}
 
-			server := server.New(server.Options{
-				AppID:            appID,
-				HostAddress:      hostAddress,
-				ListenAddress:    opts.ListenAddress,
-				PlacementAddress: opts.PlacementAddress,
-				Mode:             modes.DaprMode(opts.Mode),
-				Port:             opts.Port,
-				Security:         secHandler,
+			server, serr := server.New(server.Options{
+				Port:          opts.Port,
+				ListenAddress: opts.ListenAddress,
+				Mode:          modes.DaprMode(opts.Mode),
+				Security:      secHandler,
 
 				DataDir:                 opts.EtcdDataDir,
-				Id:                      opts.Id,
+				ReplicaCount:            opts.ReplicaCount,
+				ReplicaID:               opts.ReplicaID,
+				EtcdID:                  opts.ID,
 				EtcdInitialPeers:        opts.EtcdInitialPeers,
 				EtcdClientPorts:         opts.EtcdClientPorts,
-				EtcdClientHttpPorts:     opts.EtcdClientHttpPorts,
 				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
 				EtcdCompactionMode:      opts.EtcdCompactionMode,
 				EtcdCompactionRetention: opts.EtcdCompactionRetention,
+				EtcdClientHTTPPorts:     opts.EtcdClientHTTPPorts,
 			})
+			if serr != nil {
+				return serr
+			}
 
 			return server.Run(ctx)
 		},
