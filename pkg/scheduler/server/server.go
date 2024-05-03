@@ -89,7 +89,13 @@ type Server struct {
 
 func New(opts Options) *Server {
 	clientPorts := parseClientPorts(opts.EtcdClientPorts)
-	clientHttpPorts := parseClientPorts(opts.EtcdClientHttpPorts)
+
+	var clientHttpPorts map[string]string
+	if len(opts.EtcdClientHttpPorts) > 0 {
+		clientHttpPorts = parseClientPorts(opts.EtcdClientHttpPorts)
+	} else {
+		log.Warnf("etcd client http ports not set. This is not recommended for production.")
+	}
 
 	s := &Server{
 		port:          opts.Port,

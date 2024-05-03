@@ -29,7 +29,6 @@ func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
 
 	config.Name = s.id
-	config.Dir = s.dataDir + "-" + security.CurrentNamespace() + "-" + s.id
 	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
 	config.QuotaBackendBytes = s.etcdSpaceQuota
 	config.AutoCompactionMode = s.etcdCompactionMode
@@ -53,6 +52,7 @@ func (s *Server) conf() *embed.Config {
 	switch s.mode {
 	// can't use domain name for k8s for config.ListenPeerUrls && config.ListenClientUrls
 	case modes.KubernetesMode:
+		config.Dir = s.dataDir
 		etcdIP := "0.0.0.0"
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
@@ -69,6 +69,8 @@ func (s *Server) conf() *embed.Config {
 			}}
 		}
 	default:
+		config.Dir = s.dataDir + "-" + security.CurrentNamespace() + "-" + s.id
+
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
