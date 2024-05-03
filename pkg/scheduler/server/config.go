@@ -22,6 +22,7 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 func config(opts Options) (*embed.Config, error) {
@@ -42,7 +43,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.AutoCompactionMode = opts.EtcdCompactionMode
 	config.AutoCompactionRetention = opts.EtcdCompactionRetention
 	config.Name = opts.EtcdID
-	config.Dir = opts.DataDir
+	config.Dir = opts.DataDir + "-" + security.CurrentNamespace() + "-" + opts.EtcdID
 	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
 
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)

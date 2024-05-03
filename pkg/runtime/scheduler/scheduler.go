@@ -94,6 +94,7 @@ func (m *Manager) Run(ctx context.Context) error {
 	clients := m.clients.All()
 	runners := make([]concurrency.Runner, len(clients), len(clients)+2)
 	for i := range clients {
+		i := i
 		runners[i] = func(ctx context.Context) error {
 			return m.watchJobs(ctx, clients[i])
 		}

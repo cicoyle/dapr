@@ -16,5 +16,5 @@ package scheduler
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/api"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/appcallback"
-	//_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/streaming"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/streaming"
 )
