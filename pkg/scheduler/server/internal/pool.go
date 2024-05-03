@@ -43,7 +43,7 @@ type namespacedPool struct {
 	idx       atomic.Uint64
 	appID     map[string][]uint64
 	actorType map[string][]uint64
-	cons      map[uint64]*conn
+	conns     map[uint64]*conn
 }
 
 func NewPool() *Pool {
@@ -76,7 +76,7 @@ func (p *Pool) Add(req *scheduler.WatchJobsRequestInitial, stream schedulerv1pb.
 		nsPool = &namespacedPool{
 			appID:     make(map[string][]uint64),
 			actorType: make(map[string][]uint64),
-			cons:      make(map[uint64]*conn),
+			conns:     make(map[uint64]*conn),
 		}
 
 		p.nsPool[req.GetNamespace()] = nsPool
@@ -94,10 +94,10 @@ func (p *Pool) Add(req *scheduler.WatchJobsRequestInitial, stream schedulerv1pb.
 	var uuid uint64
 	for ok {
 		uuid = rand.Uint64()
-		_, ok = nsPool.cons[uuid]
+		_, ok = nsPool.conns[uuid]
 	}
 
-	nsPool.cons[uuid] = conn
+	nsPool.conns[uuid] = conn
 
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuid)
@@ -188,7 +188,7 @@ func (p *Pool) remove(req *scheduler.WatchJobsRequestInitial, uuid uint64) {
 		return
 	}
 
-	delete(nsPool.cons, uuid)
+	delete(nsPool.conns, uuid)
 
 	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	for i := 0; i < len(appIDConns); i++ {
@@ -244,13 +244,13 @@ func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
 		nsPool.idx.Store(0)
 	}
 
-	switch t := meta.GetType(); t.GetSource().(type) {
+	switch t := meta.GetType(); t.GetType().(type) {
 	case *schedulerv1pb.ScheduleJobMetadataType_App:
 		appIDConns, ok := nsPool.appID[meta.GetAppId()]
 		if !ok || len(appIDConns) == 0 {
 			return nil, fmt.Errorf("no connections available for appID: %s", meta.GetAppId())
 		}
-		conn := nsPool.cons[appIDConns[int(idx)%len(appIDConns)]]
+		conn := nsPool.conns[appIDConns[int(idx)%len(appIDConns)]]
 		return conn, nil
 
 	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
@@ -259,7 +259,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
 			return nil, fmt.Errorf("no connections available for actorType: %s", t.GetActor().GetType())
 		}
 
-		conn := nsPool.cons[actorTypeConns[int(idx)%len(actorTypeConns)]]
+		conn := nsPool.conns[actorTypeConns[int(idx)%len(actorTypeConns)]]
 		return conn, nil
 
 	default:

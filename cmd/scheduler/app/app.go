@@ -85,7 +85,7 @@ func Run() {
 				Security:      secHandler,
 
 				DataDir:                 opts.EtcdDataDir,
-				ReplicaTotal:            opts.ReplicaTotal,
+				ReplicaCount:            opts.ReplicaCount,
 				ReplicaID:               opts.ReplicaID,
 				EtcdID:                  opts.ID,
 				EtcdInitialPeers:        opts.EtcdInitialPeers,
@@ -93,6 +93,7 @@ func Run() {
 				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
 				EtcdCompactionMode:      opts.EtcdCompactionMode,
 				EtcdCompactionRetention: opts.EtcdCompactionRetention,
+				EtcdClientHttpPorts:     opts.EtcdClientHttpPorts,
 			})
 			if err != nil {
 				return err

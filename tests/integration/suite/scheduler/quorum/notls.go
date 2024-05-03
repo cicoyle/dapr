@@ -55,7 +55,7 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 	opts := []scheduler.Option{
 		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d,scheduler-1=http://localhost:%d,scheduler-2=http://localhost:%d", port1, port2, port3)),
 		scheduler.WithInitialClusterPorts(port1, port2, port3),
-		scheduler.WithReplicaTotal(3),
+		scheduler.WithReplicaCount(3),
 	}
 
 	clientPorts := []string{
@@ -115,8 +115,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			AppId:     n.daprd.AppID(),
 			Namespace: n.daprd.Namespace(),
 			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Source: &schedulerv1pb.ScheduleJobMetadataType_App{
-					App: new(schedulerv1pb.ScheduleJobMetadataSourceApp),
+				Type: &schedulerv1pb.ScheduleJobMetadataType_App{
+					App: new(schedulerv1pb.ScheduleTypeApp),
 				},
 			},
 		},

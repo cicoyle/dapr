@@ -42,11 +42,11 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Options struct {
-	Namespace string
-	AppID     string
-	Clients   *clients.Clients
-	Resilicy  resiliency.Provider
-	Channels  *channels.Channels
+	Namespace  string
+	AppID      string
+	Clients    *clients.Clients
+	Resiliency resiliency.Provider
+	Channels   *channels.Channels
 }
 
 // Manager manages connections to multiple schedulers.
@@ -71,7 +71,7 @@ func New(opts Options) (*Manager, error) {
 		namespace:  opts.Namespace,
 		appID:      opts.AppID,
 		clients:    opts.Clients,
-		resiliency: opts.Resilicy,
+		resiliency: opts.Resiliency,
 		channels:   opts.Channels,
 		jobCh:      make(chan *schedulerv1pb.WatchJobsResponse),
 		startCh:    make(chan struct{}),
@@ -270,11 +270,12 @@ func (m *Manager) processTriggers(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case job := <-m.jobCh:
-			log.Debugf("Received scheduled Job")
+			log.Debugf("Received scheduled job: %s", job.Name)
 			m.wg.Add(1)
 			go func() {
 				defer m.wg.Done()
 				m.handleJob(ctx, job)
+				// Send Ack to Stream
 			}()
 		}
 	}
@@ -285,7 +286,7 @@ func (m *Manager) processTriggers(ctx context.Context) error {
 func (m *Manager) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
 	meta := job.GetMetadata()
 
-	switch t := meta.GetType(); t.GetSource().(type) {
+	switch t := meta.GetType(); t.GetType().(type) {
 	case *schedulerv1pb.ScheduleJobMetadataType_App:
 		if err := m.invokeApp(ctx, job); err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
@@ -304,7 +305,7 @@ func (m *Manager) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRes
 func (m *Manager) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
 	appChannel := m.channels.AppChannel()
 	if appChannel == nil {
-		return errors.New("received app reminder but app channel not initialized")
+		return errors.New("received app job trigger but app channel not initialized")
 	}
 
 	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).

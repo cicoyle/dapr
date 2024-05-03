@@ -1197,8 +1197,8 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 				AppId:     a.actorsConfig.AppID,
 				Namespace: a.actorsConfig.Namespace,
 				Type: &schedulerv1pb.ScheduleJobMetadataType{
-					Source: &schedulerv1pb.ScheduleJobMetadataType_Actor{
-						Actor: &schedulerv1pb.ScheduleJobMetadataSourceActorReminder{
+					Type: &schedulerv1pb.ScheduleJobMetadataType_Actor{
+						Actor: &schedulerv1pb.ScheduleTypeActorReminder{
 							Id:   req.ActorID,
 							Type: req.ActorType,
 						},
@@ -1245,8 +1245,8 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 				AppId:     a.actorsConfig.AppID,
 				Namespace: a.actorsConfig.Namespace,
 				Type: &schedulerv1pb.ScheduleJobMetadataType{
-					Source: &schedulerv1pb.ScheduleJobMetadataType_Actor{
-						Actor: &schedulerv1pb.ScheduleJobMetadataSourceActorReminder{
+					Type: &schedulerv1pb.ScheduleJobMetadataType_Actor{
+						Actor: &schedulerv1pb.ScheduleTypeActorReminder{
 							Id:   req.ActorID,
 							Type: req.ActorType,
 						},

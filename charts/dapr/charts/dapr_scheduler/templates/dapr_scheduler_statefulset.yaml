@@ -116,7 +116,7 @@ spec:
         - "--listen-address=0.0.0.0"
         - "--id"
         - "$(SCHEDULER_ID)"
-        - "--replica-total"
+        - "--replica-count"
         - "{{ .Values.replicaCount }}"
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}

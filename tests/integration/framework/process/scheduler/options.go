@@ -23,7 +23,7 @@ type options struct {
 	execOpts []exec.Option
 
 	id                  string
-	replicaTotal        uint32
+	replicaCount        uint32
 	initialCluster      string
 	initialClusterPorts []int
 	etcdClientPorts     []string
@@ -56,9 +56,9 @@ func WithID(id string) Option {
 	}
 }
 
-func WithReplicaTotal(total uint32) Option {
+func WithReplicaCount(count uint32) Option {
 	return func(o *options) {
-		o.replicaTotal = total
+		o.replicaCount = count
 	}
 }
 

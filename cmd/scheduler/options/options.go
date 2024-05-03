@@ -41,7 +41,7 @@ type Options struct {
 
 	ID                      string
 	ReplicaID               uint32
-	ReplicaTotal            uint32
+	ReplicaCount            uint32
 	EtcdInitialPeers        []string
 	EtcdDataDir             string
 	EtcdClientPorts         []string
@@ -88,11 +88,11 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
-	fs.Uint32Var(&opts.ReplicaTotal, "replica-total", 1, "The total number of scheduler replicas in the cluster")
+	fs.Uint32Var(&opts.ReplicaCount, "replica-count", 1, "The total number of scheduler replicas in the cluster")
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
-	fs.StringSliceVar(&opts.EtcdClientHttpPorts, "etcd-client-http-ports", []string{""}, "Ports for etcd client http communication")
+	fs.StringSliceVar(&opts.EtcdClientHttpPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
 	fs.Int64Var(&opts.EtcdSpaceQuota, "etcd-space-quota", 2*1024*1024*1024, "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "24h", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")

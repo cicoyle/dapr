@@ -174,7 +174,7 @@ func buildJobName(name string, meta *schedulerv1pb.ScheduleJobMetadata) (string,
 		return strings.Join(ss, "||")
 	}
 
-	switch t := meta.GetType(); t.GetSource().(type) {
+	switch t := meta.GetType(); t.GetType().(type) {
 	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
 		actor := t.GetActor()
 		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil

@@ -41,12 +41,13 @@ type Options struct {
 	ListenAddress           string
 	Port                    int
 	Mode                    modes.DaprMode
-	ReplicaTotal            uint32
+	ReplicaCount            uint32
 	ReplicaID               uint32
 	DataDir                 string
 	EtcdID                  string
 	EtcdInitialPeers        []string
 	EtcdClientPorts         []string
+	EtcdClientHttpPorts     []string
 	EtcdSpaceQuota          int64
 	EtcdCompactionMode      string
 	EtcdCompactionRetention string
@@ -56,7 +57,7 @@ type Options struct {
 type Server struct {
 	listenAddress string
 	port          int
-	replicaTotal  uint32
+	replicaCount  uint32
 	replicaID     uint32
 
 	sec            security.Handler
@@ -80,7 +81,7 @@ func New(opts Options) (*Server, error) {
 	return &Server{
 		port:           opts.Port,
 		listenAddress:  opts.ListenAddress,
-		replicaTotal:   opts.ReplicaTotal,
+		replicaCount:   opts.ReplicaCount,
 		replicaID:      opts.ReplicaID,
 		sec:            opts.Security,
 		config:         config,
@@ -174,7 +175,7 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 		Client:         client,
 		Namespace:      "dapr",
 		PartitionID:    s.replicaID,
-		PartitionTotal: s.replicaTotal,
+		PartitionTotal: s.replicaCount,
 		TriggerFn:      s.triggerJob,
 	})
 	if err != nil {

@@ -299,11 +299,11 @@ func newDaprRuntime(ctx context.Context,
 		}
 
 		rt.schedulerManager, err = scheduler.New(scheduler.Options{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-			Clients:   rt.schedulerClients,
-			Resilicy:  resiliencyProvider,
-			Channels:  channels,
+			Namespace:  namespace,
+			AppID:      runtimeConfig.id,
+			Clients:    rt.schedulerClients,
+			Resiliency: resiliencyProvider,
+			Channels:   channels,
 		})
 		if err != nil {
 			return nil, err

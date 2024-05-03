@@ -35,13 +35,13 @@ message Job {
   google.protobuf.Any data = 5;
 }
 
-// ScheduleJobMetadataApp is the message used by the daprd sidecar to schedule
-// a job from an App.
-message ScheduleJobMetadataSourceApp {}
+// ScheduleTypeApp is the message used by the daprd sidecar to schedule a job
+// from an App.
+message ScheduleTypeApp {}
 
-// ScheduleJobMetadataActor is the message used by the daprd sidecar to schedule
-// a job from an Actor Reminder.
-message ScheduleJobMetadataSourceActorReminder {
+// ScheduleTypeActorReminder is the message used by the daprd sidecar to
+// schedule a job from an Actor Reminder.
+message ScheduleTypeActorReminder {
   // id is the actor ID.
 	string id = 1;
 
@@ -52,19 +52,20 @@ message ScheduleJobMetadataSourceActorReminder {
 // ScheduleJobMetadataType holds the typed metadata associated with the job for
 // different origins.
 message ScheduleJobMetadataType {
-  oneof source {
-    ScheduleJobMetadataSourceApp app = 1;
-    ScheduleJobMetadataSourceActorReminder actor = 2;
+  oneof type {
+    ScheduleTypeApp app = 1;
+    ScheduleTypeActorReminder actor = 2;
   }
 }
 
-// ScheduleJobJob is the message used by the daprd sidecar to schedule a job.
+// ScheduleJobMetadata is the message used by the daprd sidecar to schedule a
+// job.
 message ScheduleJobMetadata {
   // app_id is the App ID of the requester.
 	string app_id = 1;
 
   // namespace is the namespace of the requester.
-	string namespace = 2;
+  string namespace = 2;
 
   // type is the type of the job.
 	ScheduleJobMetadataType type = 3;

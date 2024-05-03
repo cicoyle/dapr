@@ -26,15 +26,14 @@ import (
 )
 
 func config(opts Options) (*embed.Config, error) {
-	clientPorts := make(map[string]string)
-	for _, input := range opts.EtcdClientPorts {
-		idAndPort := strings.Split(input, "=")
-		if len(idAndPort) != 2 {
-			return nil, fmt.Errorf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
-		}
-		schedulerID := strings.TrimSpace(idAndPort[0])
-		port := strings.TrimSpace(idAndPort[1])
-		clientPorts[schedulerID] = port
+	clientPorts, err := parseClientPorts(opts.EtcdClientPorts)
+	if err != nil {
+		return nil, err
+	}
+
+	clientHttpPorts, err := parseClientPorts(opts.EtcdClientHttpPorts)
+	if err != nil {
+		return nil, err
 	}
 
 	config := embed.NewConfig()
@@ -48,7 +47,7 @@ func config(opts Options) (*embed.Config, error) {
 
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL: %s", err)
 	}
 
 	config.AdvertisePeerUrls = []url.URL{{
@@ -73,6 +72,12 @@ func config(opts Options) (*embed.Config, error) {
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
+		if len(opts.EtcdClientHttpPorts) > 0 {
+			config.ListenClientHttpUrls = []url.URL{{
+				Scheme: "http",
+				Host:   fmt.Sprintf("%s:%s", etcdIP, clientHttpPorts[opts.EtcdID]),
+			}}
+		}
 	default:
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
@@ -82,6 +87,12 @@ func config(opts Options) (*embed.Config, error) {
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
+		if len(clientHttpPorts) > 0 {
+			config.ListenClientHttpUrls = []url.URL{{
+				Scheme: "http",
+				Host:   fmt.Sprintf("%s:%s", etcdURL, clientHttpPorts[opts.EtcdID]),
+			}}
+		}
 	}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
@@ -118,4 +129,19 @@ func peerHostAndPort(name string, initialCluster []string) (string, string, erro
 	}
 
 	return "", "", fmt.Errorf("scheduler ID: %s is not found in initial cluster", name)
+}
+
+func parseClientPorts(opts []string) (map[string]string, error) {
+	ports := make(map[string]string)
+	for _, input := range opts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			return nil, fmt.Errorf("Incorrect format for client http ports: %s. Should contain <id>=<client-port>", input)
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		ports[schedulerID] = port
+	}
+
+	return ports, nil
 }

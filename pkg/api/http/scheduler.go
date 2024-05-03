@@ -74,10 +74,10 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 				// Users should set the name in the url, and not in the url and body
 				name := strings.TrimSpace(chi.URLParam(r, nameParam))
 				if len(name) == 0 {
-					apierrors.Empty("Job", map[string]string{"appId": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 				}
 				if in.GetJob().GetName() != "" {
-					return nil, apierrors.SchedulerURLName(map[string]string{"appId": a.universal.AppID()})
+					return nil, apierrors.SchedulerURLName(map[string]string{"appID": a.universal.AppID()})
 				}
 
 				if in.Job == nil {
