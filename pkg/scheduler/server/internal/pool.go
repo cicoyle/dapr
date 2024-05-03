@@ -245,7 +245,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
 	}
 
 	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.ScheduleJobMetadataType_App:
+	case *schedulerv1pb.ScheduleJobMetadataType_Job:
 		appIDConns, ok := nsPool.appID[meta.GetAppId()]
 		if !ok || len(appIDConns) == 0 {
 			return nil, fmt.Errorf("no connections available for appID: %s", meta.GetAppId())

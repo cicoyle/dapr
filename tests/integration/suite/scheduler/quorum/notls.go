@@ -115,8 +115,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			AppId:     n.daprd.AppID(),
 			Namespace: n.daprd.Namespace(),
 			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_App{
-					App: new(schedulerv1pb.ScheduleTypeApp),
+				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
+					Job: new(schedulerv1pb.ScheduleTypeJob),
 				},
 			},
 		},

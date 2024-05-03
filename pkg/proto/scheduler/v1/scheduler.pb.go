@@ -105,16 +105,16 @@ func (x *Job) GetData() *anypb.Any {
 	return nil
 }
 
-// ScheduleTypeApp is the message used by the daprd sidecar to schedule a job
+// ScheduleTypeJob is the message used by the daprd sidecar to schedule a job
 // from an App.
-type ScheduleTypeApp struct {
+type ScheduleTypeJob struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *ScheduleTypeApp) Reset() {
-	*x = ScheduleTypeApp{}
+func (x *ScheduleTypeJob) Reset() {
+	*x = ScheduleTypeJob{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -122,13 +122,13 @@ func (x *ScheduleTypeApp) Reset() {
 	}
 }
 
-func (x *ScheduleTypeApp) String() string {
+func (x *ScheduleTypeJob) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ScheduleTypeApp) ProtoMessage() {}
+func (*ScheduleTypeJob) ProtoMessage() {}
 
-func (x *ScheduleTypeApp) ProtoReflect() protoreflect.Message {
+func (x *ScheduleTypeJob) ProtoReflect() protoreflect.Message {
 	mi := &file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -140,8 +140,8 @@ func (x *ScheduleTypeApp) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ScheduleTypeApp.ProtoReflect.Descriptor instead.
-func (*ScheduleTypeApp) Descriptor() ([]byte, []int) {
+// Deprecated: Use ScheduleTypeJob.ProtoReflect.Descriptor instead.
+func (*ScheduleTypeJob) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_scheduler_v1_scheduler_proto_rawDescGZIP(), []int{1}
 }
 
@@ -213,7 +213,7 @@ type ScheduleJobMetadataType struct {
 
 	// Types that are assignable to Type:
 	//
-	//	*ScheduleJobMetadataType_App
+	//	*ScheduleJobMetadataType_Job
 	//	*ScheduleJobMetadataType_Actor
 	Type isScheduleJobMetadataType_Type `protobuf_oneof:"type"`
 }
@@ -257,9 +257,9 @@ func (m *ScheduleJobMetadataType) GetType() isScheduleJobMetadataType_Type {
 	return nil
 }
 
-func (x *ScheduleJobMetadataType) GetApp() *ScheduleTypeApp {
-	if x, ok := x.GetType().(*ScheduleJobMetadataType_App); ok {
-		return x.App
+func (x *ScheduleJobMetadataType) GetJob() *ScheduleTypeJob {
+	if x, ok := x.GetType().(*ScheduleJobMetadataType_Job); ok {
+		return x.Job
 	}
 	return nil
 }
@@ -275,15 +275,15 @@ type isScheduleJobMetadataType_Type interface {
 	isScheduleJobMetadataType_Type()
 }
 
-type ScheduleJobMetadataType_App struct {
-	App *ScheduleTypeApp `protobuf:"bytes,1,opt,name=app,proto3,oneof"`
+type ScheduleJobMetadataType_Job struct {
+	Job *ScheduleTypeJob `protobuf:"bytes,1,opt,name=job,proto3,oneof"`
 }
 
 type ScheduleJobMetadataType_Actor struct {
 	Actor *ScheduleTypeActorReminder `protobuf:"bytes,2,opt,name=actor,proto3,oneof"`
 }
 
-func (*ScheduleJobMetadataType_App) isScheduleJobMetadataType_Type() {}
+func (*ScheduleJobMetadataType_Job) isScheduleJobMetadataType_Type() {}
 
 func (*ScheduleJobMetadataType_Actor) isScheduleJobMetadataType_Type() {}
 
@@ -961,17 +961,17 @@ var file_dapr_proto_scheduler_v1_scheduler_proto_rawDesc = []byte{
 	0x75, 0x6c, 0x65, 0x42, 0x0a, 0x0a, 0x08, 0x5f, 0x72, 0x65, 0x70, 0x65, 0x61, 0x74, 0x73, 0x42,
 	0x0b, 0x0a, 0x09, 0x5f, 0x64, 0x75, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x42, 0x06, 0x0a, 0x04,
 	0x5f, 0x74, 0x74, 0x6c, 0x22, 0x11, 0x0a, 0x0f, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65,
-	0x54, 0x79, 0x70, 0x65, 0x41, 0x70, 0x70, 0x22, 0x3f, 0x0a, 0x19, 0x53, 0x63, 0x68, 0x65, 0x64,
+	0x54, 0x79, 0x70, 0x65, 0x4a, 0x6f, 0x62, 0x22, 0x3f, 0x0a, 0x19, 0x53, 0x63, 0x68, 0x65, 0x64,
 	0x75, 0x6c, 0x65, 0x54, 0x79, 0x70, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d, 0x69,
 	0x6e, 0x64, 0x65, 0x72, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
 	0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01,
 	0x28, 0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x22, 0xab, 0x01, 0x0a, 0x17, 0x53, 0x63, 0x68,
 	0x65, 0x64, 0x75, 0x6c, 0x65, 0x4a, 0x6f, 0x62, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
-	0x54, 0x79, 0x70, 0x65, 0x12, 0x3c, 0x0a, 0x03, 0x61, 0x70, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x54, 0x79, 0x70, 0x65, 0x12, 0x3c, 0x0a, 0x03, 0x6a, 0x6f, 0x62, 0x18, 0x01, 0x20, 0x01, 0x28,
 	0x0b, 0x32, 0x28, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x73,
 	0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65,
-	0x64, 0x75, 0x6c, 0x65, 0x54, 0x79, 0x70, 0x65, 0x41, 0x70, 0x70, 0x48, 0x00, 0x52, 0x03, 0x61,
-	0x70, 0x70, 0x12, 0x4a, 0x0a, 0x05, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x64, 0x75, 0x6c, 0x65, 0x54, 0x79, 0x70, 0x65, 0x4a, 0x6f, 0x62, 0x48, 0x00, 0x52, 0x03, 0x6a,
+	0x6f, 0x62, 0x12, 0x4a, 0x0a, 0x05, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28,
 	0x0b, 0x32, 0x32, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x73,
 	0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x63, 0x68, 0x65,
 	0x64, 0x75, 0x6c, 0x65, 0x54, 0x79, 0x70, 0x65, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d,
@@ -1098,7 +1098,7 @@ func file_dapr_proto_scheduler_v1_scheduler_proto_rawDescGZIP() []byte {
 var file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_dapr_proto_scheduler_v1_scheduler_proto_goTypes = []interface{}{
 	(*Job)(nil),                       // 0: dapr.proto.scheduler.v1.Job
-	(*ScheduleTypeApp)(nil),           // 1: dapr.proto.scheduler.v1.ScheduleTypeApp
+	(*ScheduleTypeJob)(nil),           // 1: dapr.proto.scheduler.v1.ScheduleTypeJob
 	(*ScheduleTypeActorReminder)(nil), // 2: dapr.proto.scheduler.v1.ScheduleTypeActorReminder
 	(*ScheduleJobMetadataType)(nil),   // 3: dapr.proto.scheduler.v1.ScheduleJobMetadataType
 	(*ScheduleJobMetadata)(nil),       // 4: dapr.proto.scheduler.v1.ScheduleJobMetadata
@@ -1116,7 +1116,7 @@ var file_dapr_proto_scheduler_v1_scheduler_proto_goTypes = []interface{}{
 }
 var file_dapr_proto_scheduler_v1_scheduler_proto_depIdxs = []int32{
 	15, // 0: dapr.proto.scheduler.v1.Job.data:type_name -> google.protobuf.Any
-	1,  // 1: dapr.proto.scheduler.v1.ScheduleJobMetadataType.app:type_name -> dapr.proto.scheduler.v1.ScheduleTypeApp
+	1,  // 1: dapr.proto.scheduler.v1.ScheduleJobMetadataType.job:type_name -> dapr.proto.scheduler.v1.ScheduleTypeJob
 	2,  // 2: dapr.proto.scheduler.v1.ScheduleJobMetadataType.actor:type_name -> dapr.proto.scheduler.v1.ScheduleTypeActorReminder
 	3,  // 3: dapr.proto.scheduler.v1.ScheduleJobMetadata.type:type_name -> dapr.proto.scheduler.v1.ScheduleJobMetadataType
 	6,  // 4: dapr.proto.scheduler.v1.WatchJobsRequest.initial:type_name -> dapr.proto.scheduler.v1.WatchJobsRequestInitial
@@ -1162,7 +1162,7 @@ func file_dapr_proto_scheduler_v1_scheduler_proto_init() {
 			}
 		}
 		file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ScheduleTypeApp); i {
+			switch v := v.(*ScheduleTypeJob); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1332,7 +1332,7 @@ func file_dapr_proto_scheduler_v1_scheduler_proto_init() {
 	}
 	file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes[0].OneofWrappers = []interface{}{}
 	file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes[3].OneofWrappers = []interface{}{
-		(*ScheduleJobMetadataType_App)(nil),
+		(*ScheduleJobMetadataType_Job)(nil),
 		(*ScheduleJobMetadataType_Actor)(nil),
 	}
 	file_dapr_proto_scheduler_v1_scheduler_proto_msgTypes[5].OneofWrappers = []interface{}{

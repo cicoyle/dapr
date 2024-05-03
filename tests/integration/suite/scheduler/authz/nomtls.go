@@ -66,8 +66,8 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 			AppId:     "test",
 			Namespace: "default",
 			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_App{
-					App: new(schedulerv1pb.ScheduleTypeApp),
+				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
+					Job: new(schedulerv1pb.ScheduleTypeJob),
 				},
 			},
 		},

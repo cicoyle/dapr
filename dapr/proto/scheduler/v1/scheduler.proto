@@ -35,9 +35,9 @@ message Job {
   google.protobuf.Any data = 5;
 }
 
-// ScheduleTypeApp is the message used by the daprd sidecar to schedule a job
+// ScheduleTypeJob is the message used by the daprd sidecar to schedule a job
 // from an App.
-message ScheduleTypeApp {}
+message ScheduleTypeJob {}
 
 // ScheduleTypeActorReminder is the message used by the daprd sidecar to
 // schedule a job from an Actor Reminder.
@@ -53,7 +53,7 @@ message ScheduleTypeActorReminder {
 // different origins.
 message ScheduleJobMetadataType {
   oneof type {
-    ScheduleTypeApp app = 1;
+    ScheduleTypeJob job = 1;
     ScheduleTypeActorReminder actor = 2;
   }
 }

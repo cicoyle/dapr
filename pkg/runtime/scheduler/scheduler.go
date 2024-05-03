@@ -287,7 +287,7 @@ func (m *Manager) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRes
 	meta := job.GetMetadata()
 
 	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.ScheduleJobMetadataType_App:
+	case *schedulerv1pb.ScheduleJobMetadataType_Job:
 		if err := m.invokeApp(ctx, job); err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
 		}

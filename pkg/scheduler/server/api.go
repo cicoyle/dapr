@@ -178,7 +178,7 @@ func buildJobName(name string, meta *schedulerv1pb.ScheduleJobMetadata) (string,
 	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
 		actor := t.GetActor()
 		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
-	case *schedulerv1pb.ScheduleJobMetadataType_App:
+	case *schedulerv1pb.ScheduleJobMetadataType_Job:
 		return joinStrings("app", meta.GetNamespace(), meta.GetAppId(), name), nil
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
