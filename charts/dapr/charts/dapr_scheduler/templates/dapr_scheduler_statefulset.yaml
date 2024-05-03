@@ -71,7 +71,11 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: data-dir
-            mountPath: {{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.EtcdDataDirWinPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID){{ else }}{{ .Values.cluster.EtcdDataDirPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID){{ end }}
+          {{- if eq .Values.global.daprControlPlaneOs "windows" }}
+            mountPath: {{ .Values.cluster.EtcdDataDirWinPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID)
+          {{- else }}
+            mountPath: {{ .Values.cluster.EtcdDataDirPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID)
+          {{- end }}
             readOnly: false
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
@@ -152,7 +156,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false
           capabilities:
             drop: ["ALL"]
   {{- end }}
