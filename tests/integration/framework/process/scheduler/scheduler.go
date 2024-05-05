@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -25,13 +26,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dapr/dapr/pkg/modes"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
@@ -44,11 +52,13 @@ type Scheduler struct {
 	healthzPort int
 	metricsPort int
 
+	namespace           string
 	dataDir             string
 	id                  string
 	initialCluster      string
 	initialClusterPorts []int
 	etcdClientPorts     map[string]string
+	sentry              *sentry.Sentry
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -72,6 +82,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		initialCluster:      uids + "=http://localhost:" + strconv.Itoa(port1),
 		initialClusterPorts: []int{port1},
 		etcdClientPorts:     []string{uids + "=" + strconv.Itoa(fp.Port(t))},
+		namespace:           "default",
 	}
 
 	for _, fopt := range fopts {
@@ -79,7 +90,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 
 	tmpDir := t.TempDir()
-
 	require.NoError(t, os.Chmod(tmpDir, 0o700))
 
 	args := []string{
@@ -90,7 +100,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
-		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--etcd-data-dir=" + tmpDir,
 		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
 	}
@@ -98,11 +107,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.listenAddress != nil {
 		args = append(args, "--listen-address="+*opts.listenAddress)
 	}
-	if opts.sentryAddress != nil {
-		args = append(args, "--sentry-address="+*opts.sentryAddress)
-	}
-	if opts.trustAnchorsFile != nil {
-		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
+	if opts.sentry != nil {
+		taFile := filepath.Join(t.TempDir(), "ca.pem")
+		require.NoError(t, os.WriteFile(taFile, opts.sentry.CABundle().TrustAnchors, 0o600))
+		args = append(args,
+			"--tls-enabled=true",
+			"--sentry-address="+opts.sentry.Address(),
+			"--trust-anchors-file="+taFile,
+			"--trust-domain="+opts.sentry.TrustDomain(),
+		)
 	}
 
 	clientPorts := make(map[string]string)
@@ -116,7 +129,11 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 
 	return &Scheduler{
-		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
+		exec: exec.New(t, binary.EnvValue("scheduler"), args,
+			append(opts.execOpts, exec.WithEnvVars(t,
+				"NAMESPACE", opts.namespace,
+			))...,
+		),
 		ports:               fp,
 		id:                  opts.id,
 		port:                opts.port,
@@ -126,6 +143,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		initialClusterPorts: opts.initialClusterPorts,
 		etcdClientPorts:     clientPorts,
 		dataDir:             tmpDir,
+		sentry:              opts.sentry,
+		namespace:           opts.namespace,
 	}
 }
 
@@ -195,4 +214,53 @@ func (s *Scheduler) InitialClusterPorts() []int {
 
 func (s *Scheduler) DataDir() string {
 	return s.dataDir
+}
+
+func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
+	conn, err := grpc.DialContext(ctx, s.Address(), grpc.WithBlock(), grpc.WithReturnConnectionError(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return schedulerv1pb.NewSchedulerClient(conn)
+}
+
+func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {
+	t.Helper()
+
+	require.NotNil(t, s.sentry)
+
+	sec, err := security.New(ctx, security.Options{
+		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
+		ControlPlaneTrustDomain: s.sentry.TrustDomain(),
+		ControlPlaneNamespace:   s.sentry.Namespace(),
+		TrustAnchorsFile:        s.sentry.TrustAnchorsFile(t),
+		AppID:                   appID,
+		Mode:                    modes.StandaloneMode,
+		MTLSEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	errCh := make(chan error)
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		errCh <- sec.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		require.NoError(t, <-errCh)
+	})
+
+	sech, err := sec.Handler(ctx)
+	require.NoError(t, err)
+
+	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
+	require.NoError(t, err)
+
+	conn, err := grpc.DialContext(ctx, s.Address(), sech.GRPCDialOptionMTLS(id), grpc.WithBlock())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return schedulerv1pb.NewSchedulerClient(conn)
 }
