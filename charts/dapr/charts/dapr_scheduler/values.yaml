@@ -31,7 +31,8 @@ replicaCount: 1
 cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler
   etcdDataDirWinPath: C:\\dapr-scheduler
-  persistentVolumeClaimName: ""
+  storageClassName: ""
+  storageSize: 10Gi
 
 etcdSpaceQuota: 2147483648
 etcdCompactionMode: periodic

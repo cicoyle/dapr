@@ -16,6 +16,17 @@ spec:
   selector:
     matchLabels:
       app: dapr-scheduler-server
+  {{- if .Values.cluster.storageClassName }}
+  volumeClaimTemplates:
+  - metadata:
+      name: dapr-scheduler-data-dir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.cluster.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.cluster.storageSize }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -70,7 +81,7 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-          - name: data-dir
+          - name: dapr-scheduler-data-dir
           {{- if eq .Values.global.daprControlPlaneOs "windows" }}
             mountPath: {{ .Values.cluster.etcdDataDirWinPath }}/
           {{- else }}
@@ -187,11 +198,8 @@ spec:
         {{- end }}
       serviceAccountName: dapr-scheduler
       volumes:
-      - name: data-dir
-      {{- if .Values.cluster.persistentVolumeClaimName }}
-        persistentVolumeClaim:
-          claimName: {{ .Values.cluster.persistentVolumeClaimName }}
-      {{- else }}
+      {{- if not .Values.cluster.storageClassName }}
+      - name: dapr-scheduler-data-dir
         emptyDir:
           medium: Memory
       {{- end }}
