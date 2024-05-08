@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or impliei.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -17,8 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,6 +46,9 @@ type remote struct {
 	place     *placement.Placement
 	scheduler *procscheduler.Scheduler
 
+	daprd1called atomic.Uint64
+	daprd2called atomic.Uint64
+
 	actorIDsNum int
 	actorIDs    []string
 
@@ -63,43 +66,49 @@ func (r *remote) Setup(t *testing.T) []framework.Option {
 		r.actorIDs[i] = uid.String()
 	}
 
-	handler := http.NewServeMux()
-	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"entities": ["myactortype"]}`))
-	})
-	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	for _, id := range r.actorIDs {
-		id := id
-		handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
-			r.lock.Lock()
-			defer r.lock.Unlock()
-			r.methodcalled = append(r.methodcalled, id)
+	newHTTP := func(called *atomic.Uint64) *prochttp.HTTP {
+		handler := http.NewServeMux()
+		handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"entities": ["myactortype"]}`))
 		})
-		handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/foo", id), func(http.ResponseWriter, *http.Request) {})
+		handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		for _, id := range r.actorIDs {
+			id := id
+			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
+				r.lock.Lock()
+				defer r.lock.Unlock()
+				r.methodcalled = append(r.methodcalled, id)
+				called.Add(1)
+			})
+			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/foo", id), func(http.ResponseWriter, *http.Request) {})
+		}
+
+		return prochttp.New(t, prochttp.WithHandler(handler))
 	}
 
 	r.scheduler = procscheduler.New(t)
-	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	r.place = placement.New(t)
 
+	srv1 := newHTTP(&r.daprd1called)
+	srv2 := newHTTP(&r.daprd2called)
 	r.daprd1 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(srv1.Port()),
 	)
 	r.daprd2 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(srv2.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.scheduler, r.place, srv, r.daprd1, r.daprd2),
+		framework.WithProcesses(r.scheduler, r.place, srv1, srv2, r.daprd1, r.daprd2),
 	}
 }
 
@@ -109,7 +118,7 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	r.daprd1.WaitUntilRunning(t, ctx)
 	r.daprd2.WaitUntilRunning(t, ctx)
 
-	daprdURL := "http://localhost:" + strconv.Itoa(r.daprd1.HTTPPort()) + "/v1.0/actors/myactortype/"
+	daprdURL := "http://" + r.daprd1.HTTPAddress() + "/v1.0/actors/myactortype/"
 	client := util.HTTPClient(t)
 	for i := 0; i < r.actorIDsNum; i++ {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -142,4 +151,7 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		return len(r.methodcalled) == r.actorIDsNum
 	}, time.Second*3, time.Millisecond*10)
 	assert.ElementsMatch(t, r.actorIDs, r.methodcalled)
+
+	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
+	assert.GreaterOrEqual(t, r.daprd2called.Load(), uint64(0))
 }

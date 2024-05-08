@@ -36,6 +36,7 @@ type options struct {
 	metricsPort   int
 	listenAddress *string
 	sentry        *sentry.Sentry
+	dataDir       *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -114,5 +115,11 @@ func WithSentry(sentry *sentry.Sentry) Option {
 func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = namespace
+	}
+}
+
+func WithDataDir(dataDir string) Option {
+	return func(o *options) {
+		o.dataDir = &dataDir
 	}
 }

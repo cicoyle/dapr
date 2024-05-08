@@ -52,13 +52,12 @@ type Scheduler struct {
 	healthzPort int
 	metricsPort int
 
-	namespace           string
-	dataDir             string
-	id                  string
-	initialCluster      string
-	initialClusterPorts []int
-	etcdClientPorts     map[string]string
-	sentry              *sentry.Sentry
+	namespace       string
+	dataDir         string
+	id              string
+	initialCluster  string
+	etcdClientPorts map[string]string
+	sentry          *sentry.Sentry
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -73,24 +72,28 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	port1 := fp.Port(t)
 
 	opts := options{
-		logLevel:            "info",
-		id:                  uids,
-		replicaCount:        1,
-		port:                fp.Port(t),
-		healthzPort:         fp.Port(t),
-		metricsPort:         fp.Port(t),
-		initialCluster:      uids + "=http://localhost:" + strconv.Itoa(port1),
-		initialClusterPorts: []int{port1},
-		etcdClientPorts:     []string{uids + "=" + strconv.Itoa(fp.Port(t))},
-		namespace:           "default",
+		logLevel:        "info",
+		id:              uids,
+		replicaCount:    1,
+		port:            fp.Port(t),
+		healthzPort:     fp.Port(t),
+		metricsPort:     fp.Port(t),
+		initialCluster:  uids + "=http://localhost:" + strconv.Itoa(port1),
+		etcdClientPorts: []string{uids + "=" + strconv.Itoa(fp.Port(t))},
+		namespace:       "default",
 	}
 
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
-	tmpDir := t.TempDir()
-	require.NoError(t, os.Chmod(tmpDir, 0o700))
+	var dataDir string
+	if opts.dataDir != nil {
+		dataDir = *opts.dataDir
+	} else {
+		dataDir = t.TempDir()
+		require.NoError(t, os.Chmod(dataDir, 0o700))
+	}
 
 	args := []string{
 		"--log-level=" + opts.logLevel,
@@ -100,7 +103,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
-		"--etcd-data-dir=" + tmpDir,
+		"--etcd-data-dir=" + dataDir,
 		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
 	}
 
@@ -134,17 +137,16 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 				"NAMESPACE", opts.namespace,
 			))...,
 		),
-		ports:               fp,
-		id:                  opts.id,
-		port:                opts.port,
-		healthzPort:         opts.healthzPort,
-		metricsPort:         opts.metricsPort,
-		initialCluster:      opts.initialCluster,
-		initialClusterPorts: opts.initialClusterPorts,
-		etcdClientPorts:     clientPorts,
-		dataDir:             tmpDir,
-		sentry:              opts.sentry,
-		namespace:           opts.namespace,
+		ports:           fp,
+		id:              opts.id,
+		port:            opts.port,
+		healthzPort:     opts.healthzPort,
+		metricsPort:     opts.metricsPort,
+		initialCluster:  opts.initialCluster,
+		etcdClientPorts: clientPorts,
+		dataDir:         dataDir,
+		sentry:          opts.sentry,
+		namespace:       opts.namespace,
 	}
 }
 
@@ -206,10 +208,6 @@ func (s *Scheduler) InitialCluster() string {
 
 func (s *Scheduler) EtcdClientPort() string {
 	return s.etcdClientPorts[s.id]
-}
-
-func (s *Scheduler) InitialClusterPorts() []int {
-	return s.initialClusterPorts
 }
 
 func (s *Scheduler) DataDir() string {

@@ -23,10 +23,10 @@ import (
 )
 
 // conn represents a single connection bidirectional stream between the
-// scheduler and the client. conn manages sending triggered jobs to the client,
-// and receiving job process results from the client. Jobs are sent serially
-// via a channel as gRPC does not support concurrent sends.
-// conn tracks the inflight jobs and acks them when the client sends back the
+// scheduler and the client (daprd). conn manages sending triggered jobs to the
+// client, and receiving job process results from the client. Jobs are sent
+// serially via a channel as gRPC does not support concurrent sends. conn
+// tracks the inflight jobs and acks them when the client sends back the
 // result, releasing the job triggering.
 type conn struct {
 	pool  *Pool
@@ -65,7 +65,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 			select {
 			case job := <-conn.jobCh:
 				if err := stream.Send(job); err != nil {
-					log.Warnf("Error sending job to connection: %v", err)
+					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetId(), err)
 				}
 			case <-p.closeCh:
 				return

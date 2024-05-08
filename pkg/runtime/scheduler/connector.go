@@ -15,7 +15,7 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -29,12 +29,26 @@ type connector struct {
 	actors   actors.ActorRuntime
 }
 
+// run starts the scheduler connector. Attempts to re-connect to the Scheduler
+// to WatchJobs on non-terminal errors.
 func (c *connector) run(ctx context.Context) error {
 	for {
 		stream, err := c.client.WatchJobs(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to watch scheduler jobs: %s", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
+
+		if err != nil {
+			log.Errorf("failed to watch scheduler jobs, retrying: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+
+		log.Info("Scheduler stream connected")
 
 		if err = stream.Send(c.req); err != nil {
 			return err

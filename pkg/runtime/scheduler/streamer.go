@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -42,16 +43,20 @@ type streamer struct {
 	wg sync.WaitGroup
 }
 
+// run starts the streamer and blocks until the stream is closed or an error occurs.
 func (s *streamer) run(ctx context.Context) error {
 	return concurrency.NewRunnerManager(s.receive, s.outgoing).Run(ctx)
 }
 
+// receive is a long running blocking process which listens for incoming
+// scheduler job messages. It then invokes the appropriate app or actor
+// reminder based on the job metadata.
 func (s *streamer) receive(ctx context.Context) error {
 	defer s.wg.Wait()
 
 	for {
 		resp, err := s.stream.Recv()
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || errors.Is(err, io.EOF) {
 			return ctx.Err()
 		}
 		if err != nil {
@@ -75,6 +80,10 @@ func (s *streamer) receive(ctx context.Context) error {
 	}
 }
 
+// outgoing is a long running blocking process which sends ACK scheduler job
+// results back to the Scheduler. Ack messages are collected via a channel to
+// ensure they are sent unary over the stream- gRPC does not support parallel
+// message sends.
 func (s *streamer) outgoing(ctx context.Context) error {
 	for {
 		select {
@@ -90,6 +99,7 @@ func (s *streamer) outgoing(ctx context.Context) error {
 	}
 }
 
+// handleJob invokes the appropriate app or actor reminder based on the job metadata.
 func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
 	meta := job.GetMetadata()
 
@@ -109,10 +119,14 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	}
 }
 
+// invokeApp calls the local app with the given job data.
 func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
 	appChannel := s.channels.AppChannel()
 	if appChannel == nil {
-		return errors.New("received app job trigger but app channel not initialized")
+		return errors.New("received job, but app channel not initialized")
+		if err != nil {
+			return err
+		}
 	}
 
 	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).
@@ -146,9 +160,10 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	return nil
 }
 
+// invokeActorReminder calls the actor ID with the given reminder data.
 func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
 	if s.actors == nil {
-		return errors.New("received actor reminder but actor runtime is not initialized")
+		return errors.New("received actor reminder job but actor runtime is not initialized")
 	}
 
 	actor := job.GetMetadata().GetType().GetActor()

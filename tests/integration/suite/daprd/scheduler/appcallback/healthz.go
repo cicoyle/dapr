@@ -69,7 +69,6 @@ func (h *healthz) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppHealthCheck(true),
 		daprd.WithAppHealthProbeInterval(1),
-		daprd.WithAppHealthProbeInterval(1),
 	)
 
 	return []framework.Option{

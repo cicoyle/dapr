@@ -155,7 +155,7 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 }
 
 func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
-	log.Debugf("Triggering job")
+	log.Debugf("Triggering job: %s", req.GetName())
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
 	defer cancel()

@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or impliei.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -16,7 +16,6 @@ package scheduler
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -89,7 +88,7 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
-	daprdURL := "http://localhost:" + strconv.Itoa(r.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid"
+	daprdURL := "http://" + r.daprd.HTTPAddress() + "/v1.0/actors/myactortype/myactorid"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
 	require.NoError(t, err)
 

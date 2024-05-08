@@ -75,6 +75,7 @@ func (m *Manager) Run(ctx context.Context) error {
 	}
 }
 
+// watchJobs watches for job triggers from all scheduler clients.
 func (m *Manager) watchJobs(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -122,6 +123,8 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }
 
+// Start starts the scheduler manager with the given actors runtime, if it is
+// enabled, to begin receiving job triggers.
 func (m *Manager) Start(actors actors.ActorRuntime) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -135,6 +138,7 @@ func (m *Manager) Start(actors actors.ActorRuntime) {
 	}
 }
 
+// Stop stops the scheduler manager, which stops watching for job triggers.
 func (m *Manager) Stop() {
 	m.lock.Lock()
 	defer m.lock.Unlock()

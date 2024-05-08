@@ -187,10 +187,6 @@ func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
 	}
 
 	idx := nsPool.idx.Add(1)
-	if idx >= ^uint64(0)-1000 {
-		idx = 0
-		nsPool.idx.Store(0)
-	}
 
 	switch t := meta.GetType(); t.GetType().(type) {
 	case *schedulerv1pb.ScheduleJobMetadataType_Job:
