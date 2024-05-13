@@ -81,8 +81,8 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-m.stopStartCh:
+		defer m.wg.Done()
 	}
-	defer m.wg.Done()
 
 	var entities []string
 	if m.actors != nil {

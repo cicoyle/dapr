@@ -24,14 +24,14 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/security/fake"
-	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/kit/crypto/test"
 	"github.com/dapr/kit/ptr"
 )
 
 func Test_Metadata(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-scheduler")
-	pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
+	pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 	tests := map[string]struct {
 		ctx         context.Context
@@ -117,7 +117,7 @@ func Test_Metadata(t *testing.T) {
 func Test_Initial(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-scheduler")
-	pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
+	pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 	tests := map[string]struct {
 		ctx         context.Context

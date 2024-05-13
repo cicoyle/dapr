@@ -124,9 +124,6 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	appChannel := s.channels.AppChannel()
 	if appChannel == nil {
 		return errors.New("received job, but app channel not initialized")
-		if err != nil {
-			return err
-		}
 	}
 
 	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).

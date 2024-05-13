@@ -65,7 +65,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 			select {
 			case job := <-conn.jobCh:
 				if err := stream.Send(job); err != nil {
-					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetId(), err)
+					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
 				}
 			case <-p.closeCh:
 				return

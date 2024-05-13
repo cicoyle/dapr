@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/kit/ptr"
 )
 
 type Scheduler struct {
@@ -233,7 +234,7 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
 		ControlPlaneTrustDomain: s.sentry.TrustDomain(),
 		ControlPlaneNamespace:   s.sentry.Namespace(),
-		TrustAnchorsFile:        s.sentry.TrustAnchorsFile(t),
+		TrustAnchorsFile:        ptr.Of(s.sentry.TrustAnchorsFile(t)),
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,
