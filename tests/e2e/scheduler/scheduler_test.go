@@ -35,32 +35,30 @@ import (
 )
 
 const (
-	appName                = "schedulerapp"
-	schedulerlogsURLFormat = "%s/test/logs" // URL to fetch logs from test app.
-	numHealthChecks        = 1              // Number of get calls before starting tests.
-	//numIterations          = 7              // Number of times each test should run.
-	numIterations             = 1                                   // Number of times each test should run.
-	jobName                   = "testjob"                           // Job name.
-	scheduleJobURLFormat      = "%s/scheduleJob/" + jobName + "-%s" // Schedule Job URL
-	getJobURLFormat           = "%s/job/" + jobName
-	getTriggeredJobsURLFormat = "%s/getTriggeredJobs"
-	jobNameForGet             = "GetTestJob" // Job name for getting tests
-	//numJobsPerThread             = 10           // Number of get calls before starting tests.
-	numJobsPerThread = 1 // Number of get calls before starting tests.
+	appName                   = "schedulerapp"
+	numHealthChecks           = 2                                      // Number of get calls before starting tests.
+	numIterations             = 4                                      // Number of times each test should run.
+	jobName                   = "testjob"                              // Job name.
+	scheduleJobURLFormat      = "%s/scheduleJob/" + jobName + "-%s-%s" // App Schedule Job URL.
+	getTriggeredJobsURLFormat = "%s/getTriggeredJobs"                  // App Get the Triggered Jobs URL.
+	numJobsPerThread          = 10                                     // Number of get calls before starting tests.
 )
+
+type triggeredJob struct {
+	TypeURL string `json:"type_url"`
+	Value   string `json:"value"`
+}
 
 type jobData struct {
 	DataType   string `json:"@type"`
 	Expression string `json:"expression"`
 }
 
-// TODO: unexport the fields
 type job struct {
 	Data     jobData `json:"data,omitempty"`
 	Schedule string  `json:"schedule,omitempty"`
 	Repeats  int     `json:"repeats,omitempty"`
 	DueTime  string  `json:"dueTime,omitempty"`
-	TTL      string  `json:"ttl,omitempty"`
 }
 
 var tr *runner.TestRunner
@@ -83,11 +81,6 @@ func TestMain(m *testing.M) {
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
-}
-
-type triggeredJob struct {
-	TypeURL string `json:"type_url"`
-	Value   string `json:"value"`
 }
 
 func TestCRUD(t *testing.T) {
@@ -127,10 +120,11 @@ func TestCRUD(t *testing.T) {
 
 				for i := 0; i < numJobsPerThread; i++ {
 					// Call app to schedule job, send job to app
-					log.Printf("Scheduling job: testjob-%s", strconv.Itoa(iteration))
-					_, err = utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration)), jobBody)
+					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
+					_, err = utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
 				}
+				time.Sleep(2 * time.Second)
 			}(iteration)
 		}
 		wg.Wait()
@@ -143,7 +137,7 @@ func TestCRUD(t *testing.T) {
 		var triggeredJobs []triggeredJob
 		err = json.Unmarshal([]byte(resp), &triggeredJobs)
 		require.NoError(t, err)
-		assert.Len(t, triggeredJobs, numIterations)
+		assert.Len(t, triggeredJobs, numIterations*numJobsPerThread)
 		t.Log("Done.")
 	})
 }

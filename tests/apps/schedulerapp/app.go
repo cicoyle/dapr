@@ -166,6 +166,9 @@ func jobHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("error decoding JSON: %v", err), http.StatusBadRequest)
 		return
 	}
+	vars := mux.Vars(r)
+	jobName := vars["name"]
+	log.Printf("Adding job to global slice: %s", jobName)
 
 	addTriggeredJob(tjob)
 	w.WriteHeader(http.StatusOK)
