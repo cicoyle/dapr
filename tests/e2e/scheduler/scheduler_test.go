@@ -110,7 +110,7 @@ func TestCRUD(t *testing.T) {
 
 	time.Sleep(6 * time.Second) // TODO rm
 
-	t.Run("Schedule job and get should succeed.", func(t *testing.T) {
+	t.Run("Schedule job and app should receive triggered job.", func(t *testing.T) {
 		var wg sync.WaitGroup
 		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
@@ -124,20 +124,27 @@ func TestCRUD(t *testing.T) {
 					_, err = utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
 				}
-				time.Sleep(2 * time.Second)
 			}(iteration)
 		}
 		wg.Wait()
 
-		// Call the app endpoint to get triggered jobs
-		log.Println("Checking the count of stored triggered jobs equals the scheduled count of jobs")
-		resp, err := utils.HTTPGet(fmt.Sprintf(getTriggeredJobsURLFormat, externalURL))
-		require.NoError(t, err)
+		assert.Eventually(t, func() bool {
+			log.Println("Checking the count of stored triggered jobs equals the scheduled count of jobs")
+			// Call the app endpoint to get triggered jobs
+			resp, err := utils.HTTPGet(fmt.Sprintf(getTriggeredJobsURLFormat, externalURL))
+			if err != nil {
+				return false
+			}
 
-		var triggeredJobs []triggeredJob
-		err = json.Unmarshal([]byte(resp), &triggeredJobs)
-		require.NoError(t, err)
-		assert.Len(t, triggeredJobs, numIterations*numJobsPerThread)
+			var triggeredJobs []triggeredJob
+			err = json.Unmarshal([]byte(resp), &triggeredJobs)
+			if err != nil {
+				return false
+			}
+
+			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
+			return len(triggeredJobs) == numIterations*numJobsPerThread
+		}, 5*time.Second, 50*time.Millisecond)
 		t.Log("Done.")
 	})
 }
