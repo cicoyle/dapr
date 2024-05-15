@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-# E2E test app list
+# E2E test app list (folder name)
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
 E2E_TEST_APPS=actorjava \
 actordotnet \
@@ -19,6 +19,7 @@ actorpython \
 actorphp \
 healthapp \
 hellodapr \
+schedulerapp \
 stateapp \
 secretapp \
 service_invocation \
@@ -68,22 +69,23 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer \
-actor_reminder \
-actor_activation \
-service_invocation_http \
-service_invocation_grpc \
-state_get_grpc \
-state_get_http \
-pubsub_publish_grpc \
-pubsub_publish_http \
-pubsub_bulk_publish_grpc \
-pubsub_bulk_publish_http \
+PERF_TESTS=actor_activation \
 actor_double_activation \
 actor_id_scale \
+actor_reminder \
+actor_timer \
 actor_type_scale \
 configuration \
+pubsub_bulk_publish_grpc \
+pubsub_bulk_publish_http \
+pubsub_publish_grpc \
+pubsub_publish_http \
 pubsub_subscribe_http \
+scheduler \
+service_invocation_grpc \
+service_invocation_http \
+state_get_grpc \
+state_get_http \
 workflows \
 
 KUBECTL=kubectl
@@ -258,7 +260,7 @@ create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
 
 delete-test-namespace:
-	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 

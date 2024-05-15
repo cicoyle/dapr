@@ -190,6 +190,7 @@ func TestActorReminder(t *testing.T) {
 		DueTime: "1s",
 		Period:  "1s",
 	}
+
 	reminderBody, err := json.Marshal(reminder)
 	require.NoError(t, err)
 
