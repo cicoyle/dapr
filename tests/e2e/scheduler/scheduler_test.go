@@ -84,11 +84,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestCRUD(t *testing.T) {
-	//externalURL := tr.Platform.AcquireAppExternalURL(appName)
-	externalURL := "localhost:3000"
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-
-	time.Sleep(6 * time.Second) // TODO rm
 
 	t.Logf("Checking if app is healthy ...")
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
@@ -107,8 +104,6 @@ func TestCRUD(t *testing.T) {
 	}
 	jobBody, err := json.Marshal(j)
 	require.NoError(t, err)
-
-	time.Sleep(6 * time.Second) // TODO rm
 
 	t.Run("Schedule job and app should receive triggered job.", func(t *testing.T) {
 		var wg sync.WaitGroup
