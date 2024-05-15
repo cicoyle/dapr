@@ -83,7 +83,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestCRUD(t *testing.T) {
+func TestJobTriggered(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
