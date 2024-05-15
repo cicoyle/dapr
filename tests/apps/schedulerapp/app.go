@@ -24,9 +24,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/gorilla/mux"
 )
 
 const (
@@ -192,7 +193,6 @@ func appRouter() http.Handler {
 	// get the triggered jobs back for testing purposes
 	router.HandleFunc("/getTriggeredJobs", getTriggeredJobs).Methods(http.MethodGet)
 
-	//router.HandleFunc("/test/logs", logsHandler).Methods(http.MethodGet)
 	router.HandleFunc("/healthz", healthzHandler).Methods(http.MethodGet)
 	router.Use(mux.CORSMethodMiddleware(router))
 
