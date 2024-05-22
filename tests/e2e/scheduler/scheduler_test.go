@@ -99,8 +99,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestJobTriggered(t *testing.T) {
-	externalURL := "localhost:3000"
-	//externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
 	t.Logf("Checking if app is healthy ...")
@@ -120,8 +119,6 @@ func TestJobTriggered(t *testing.T) {
 	}
 	jobBody, err := json.Marshal(j)
 	require.NoError(t, err)
-
-	time.Sleep(6 * time.Second)
 
 	t.Run("Schedule job and app should receive triggered job.", func(t *testing.T) {
 		var wg sync.WaitGroup
