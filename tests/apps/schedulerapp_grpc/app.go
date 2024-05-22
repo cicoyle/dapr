@@ -104,14 +104,6 @@ func scheduleJobGRPC(name string, jobWrapper JobWrapper) error {
 	return nil
 }
 
-// addTriggeredJob appends the triggered job to the global slice
-func addTriggeredJob(job triggeredJob) {
-	jobsMutex.Lock()
-	defer jobsMutex.Unlock()
-	triggeredJobs = append(triggeredJobs, job)
-	log.Printf("Triggered job added: %+v\n", job)
-}
-
 func (s *server) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*runtimev1pb.HealthCheckResponse, error) {
 	return &runtimev1pb.HealthCheckResponse{}, nil
 }
@@ -154,6 +146,14 @@ func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRe
 	return &runtimev1pb.JobEventResponse{}, nil
 }
 
+// addTriggeredJob appends the triggered job to the global slice
+func addTriggeredJob(job triggeredJob) {
+	jobsMutex.Lock()
+	defer jobsMutex.Unlock()
+	triggeredJobs = append(triggeredJobs, job)
+	log.Printf("Triggered job added: %+v\n", job)
+}
+
 // scheduleJobHandler is to schedule a job with the Daprd sidecar
 func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract the job name from the URL path parameters
@@ -178,7 +178,7 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// getTriggeredJobs returns the global slice of triggered jobs
+// getStoredJobs returns the global slice of triggered jobs
 func getStoredJobs() []triggeredJob {
 	jobsMutex.Lock()
 	defer jobsMutex.Unlock()
