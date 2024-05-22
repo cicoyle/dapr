@@ -43,7 +43,7 @@ const (
 	jobName                   = "testjob"                              // Job name.
 	scheduleJobURLFormat      = "%s/scheduleJob/" + jobName + "-%s-%s" // App Schedule Job URL.
 	getTriggeredJobsURLFormat = "%s/getTriggeredJobs"                  // App Get the Triggered Jobs URL.
-	numJobsPerThread          = 10                                     // Number of get calls before starting tests.
+	numJobsPerGoRoutine       = 10                                     // Number of get calls before starting tests.
 )
 
 type triggeredJob struct {
@@ -128,7 +128,7 @@ func TestJobTriggered(t *testing.T) {
 				defer wg.Done()
 				t.Logf("Running iteration %d out of %d ...", iteration, numIterations)
 
-				for i := 0; i < numJobsPerThread; i++ {
+				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to schedule job, send job to app
 					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
 					_, err = utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
@@ -153,7 +153,7 @@ func TestJobTriggered(t *testing.T) {
 			}
 
 			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
-			return len(triggeredJobs) == numIterations*numJobsPerThread
+			return len(triggeredJobs) == numIterations*numJobsPerGoRoutine
 		}, 5*time.Second, 50*time.Millisecond)
 		t.Log("Done.")
 	})
