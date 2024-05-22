@@ -20,6 +20,7 @@ actorphp \
 healthapp \
 hellodapr \
 schedulerapp \
+schedulerapp_grpc \
 stateapp \
 secretapp \
 service_invocation \

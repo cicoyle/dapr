@@ -26,14 +26,12 @@ import (
 
 	"github.com/gorilla/mux"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
 	appPort      = 3000
 	daprPortHTTP = 3500
-	daprPortGRPC = 50001
 )
 
 type JobWrapper struct {
@@ -59,7 +57,6 @@ type job struct {
 }
 
 var (
-	grpcClient runtimev1pb.DaprClient
 	httpClient = utils.NewHTTPClient()
 
 	triggeredJobs []triggeredJob
