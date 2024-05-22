@@ -35,6 +35,8 @@ import (
 )
 
 const (
+	appPortGRPC               = 3001
+	appNameGRPC               = "schedulerapp-grpc"
 	appName                   = "schedulerapp"
 	numHealthChecks           = 2                                      // Number of get calls before starting tests.
 	numIterations             = 4                                      // Number of times each test should run.
@@ -65,9 +67,10 @@ var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("scheduler")
-	utils.InitHTTPClient(false)
+	utils.InitHTTPClient(true)
 
 	testApps := []kube.AppDescription{
+		// HTTP test
 		{
 			AppName:             appName,
 			DaprEnabled:         true,
@@ -77,6 +80,18 @@ func TestMain(m *testing.M) {
 			IngressEnabled:      true,
 			MetricsEnabled:      true,
 		},
+		// GRPC test
+		{
+			AppName:             appNameGRPC,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-schedulerapp_grpc",
+			Replicas:            1,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			AppProtocol:         "grpc",
+			AppPort:             appPortGRPC,
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
@@ -84,7 +99,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestJobTriggered(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	externalURL := "localhost:3000"
+	//externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
 	t.Logf("Checking if app is healthy ...")
@@ -104,6 +120,8 @@ func TestJobTriggered(t *testing.T) {
 	}
 	jobBody, err := json.Marshal(j)
 	require.NoError(t, err)
+
+	time.Sleep(6 * time.Second)
 
 	t.Run("Schedule job and app should receive triggered job.", func(t *testing.T) {
 		var wg sync.WaitGroup
