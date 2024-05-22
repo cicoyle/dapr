@@ -251,7 +251,6 @@ func appRouter() http.Handler {
 
 // grpc & http server. http for test driver calls, grpc for calls to dapr
 func main() {
-	// Initialize the Dapr gRPC client
 	daprClient = utils.GetGRPCClient(daprPortGRPC)
 
 	// Create a channel to handle shutdown signals
@@ -267,7 +266,6 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Start the HTTP server in a goroutine
 	go func() {
 		log.Printf("Scheduler http server listening on :%d", appPortHTTP)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -286,7 +284,6 @@ func main() {
 
 	log.Printf("Scheduler grpc server listening on :%d", appPortGRPC)
 
-	// Start the gRPC server in a goroutine
 	go func() {
 		if err := grpcServer.Serve(grpcLis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
@@ -299,7 +296,6 @@ func main() {
 		log.Println("Shutdown signal received")
 		grpcServer.GracefulStop()
 
-		// Create a context with a timeout for the HTTP server shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(ctx); err != nil {
