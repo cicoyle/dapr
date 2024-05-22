@@ -47,7 +47,6 @@ func New(ctx context.Context, opts Options) (*Clients, error) {
 	clients := make([]schedulerv1pb.SchedulerClient, len(opts.Addresses))
 	for i, address := range opts.Addresses {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
-		// TODO: retry here
 		client, err := client.New(ctx, address, opts.Security)
 		if err != nil {
 			return nil, fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
