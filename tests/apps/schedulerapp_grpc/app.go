@@ -262,8 +262,9 @@ func main() {
 	shutdownComplete := make(chan struct{})
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPortHTTP),
-		Handler: appRouter(),
+		Addr:              fmt.Sprintf(":%d", appPortHTTP),
+		Handler:           appRouter(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	// Start the HTTP server in a goroutine

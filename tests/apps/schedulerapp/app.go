@@ -126,7 +126,7 @@ func addTriggeredJob(job triggeredJob) {
 	log.Printf("Triggered job added: %+v\n", job)
 }
 
-// getTriggeredJobs returns the global slice of triggered jobs
+// getStoredJobs returns the global slice of triggered jobs
 func getStoredJobs() []triggeredJob {
 	jobsMutex.Lock()
 	defer jobsMutex.Unlock()
