@@ -521,8 +521,8 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 	metadata := req.GetMetadata()
 	if metadata != nil {
 		if values, ok := metadata["namespace"]; ok {
-			if len(values.Values) > 0 {
-				actorNamespace = values.Values[0]
+			if len(values.GetValues()) > 0 {
+				actorNamespace = values.GetValues()[0]
 			}
 		}
 	}
@@ -1356,11 +1356,8 @@ func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest
 			ActorID:   req.ActorID,
 			ActorType: req.ActorType,
 			Data:      data,
-			Period: internal.ReminderPeriod{ // TODO: confirm exporting these vals
-				Value:   job.GetJob().GetSchedule(),
-				Repeats: int(job.GetJob().GetRepeats()),
-			},
-			DueTime: job.GetJob().GetDueTime(),
+			Period:    internal.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
+			DueTime:   job.GetJob().GetDueTime(),
 		}
 
 		return reminder, nil
