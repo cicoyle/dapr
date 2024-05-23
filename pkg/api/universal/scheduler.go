@@ -47,11 +47,11 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name: job.GetName(),
-		Metadata: &scheduJobMetadata{
+		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &scheduJobMetadataType{
-				Type: &scheduJobMetadataType_Job{
+			Type: &schedulerv1pb.JobMetadataType{
+				Type: &schedulerv1pb.JobMetadataType_Job{
 					Job: new(schedulerv1pb.TypeJob),
 				},
 			},

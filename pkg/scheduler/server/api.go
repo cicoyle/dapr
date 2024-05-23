@@ -160,7 +160,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
 	defer cancel()
 
-	var meta schedulerv1pb.ScheduleJobMetadata
+	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
 		return true
