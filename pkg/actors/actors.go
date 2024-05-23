@@ -125,6 +125,7 @@ type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
 	schedulerClients   *clients.Clients
+	schedulerReminders bool
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
@@ -152,15 +153,16 @@ type actorsRuntime struct {
 
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
-	AppChannel       channel.AppChannel
-	GRPCConnectionFn GRPCConnectionFn
-	Config           Config
-	TracingSpec      config.TracingSpec
-	Resiliency       resiliency.Provider
-	StateStoreName   string
-	CompStore        *compstore.ComponentStore
-	Security         security.Handler
-	SchedulerClients *clients.Clients
+	AppChannel         channel.AppChannel
+	GRPCConnectionFn   GRPCConnectionFn
+	Config             Config
+	TracingSpec        config.TracingSpec
+	Resiliency         resiliency.Provider
+	StateStoreName     string
+	CompStore          *compstore.ComponentStore
+	Security           security.Handler
+	SchedulerClients   *clients.Clients
+	SchedulerReminders bool
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -191,6 +193,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		compStore:          opts.CompStore,
 		sec:                opts.Security,
 		schedulerClients:   opts.SchedulerClients,
+		schedulerReminders: opts.SchedulerReminders,
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -239,7 +242,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
-	if opts.Config.SchedulerClients != nil {
+	if opts.Config.SchedulerClients != nil && opts.SchedulerReminders {
 		log.Info("Using Scheduler service for reminders.")
 	}
 
@@ -1184,7 +1187,7 @@ func scheduleFromPeriod(period string) (*string, *uint32, error) {
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
-	if a.schedulerClients != nil {
+	if a.schedulerClients != nil && a.schedulerReminders {
 		var dueTime *string
 		if len(req.DueTime) > 0 {
 			dueTime = ptr.Of(req.DueTime)
@@ -1261,7 +1264,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	if a.schedulerClients != nil {
+	if a.schedulerClients != nil && a.schedulerReminders {
 		internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
 			Name: req.Name,
 			Metadata: &schedulerv1pb.ScheduleJobMetadata{
