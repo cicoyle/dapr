@@ -292,7 +292,7 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
-#		--set dapr_scheduler.replicaCount=$(DAPR_SCHEDULER_REPLICAS) \
+		--set dapr_scheduler.replicaCount=$(DAPR_SCHEDULER_REPLICAS) \
 		$(ADDITIONAL_HELM_SET) $(HELM_CHART_DIR)
 
 ################################################################################
