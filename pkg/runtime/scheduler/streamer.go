@@ -150,7 +150,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		statusCode := int(response.Status().GetCode())
 		switch {
 		case statusCode >= 200 && statusCode <= 299:
-			log.Debugf("Sent job: %s to app", job.GetName())
+			log.Debugf("Sent job %s to app", job.GetName())
 		case statusCode == http.StatusNotFound:
 			body, _ := response.RawDataFull()
 			log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", job.GetName(), body, statusCode)
@@ -162,7 +162,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		statusCode := response.Status().GetCode()
 		switch codes.Code(statusCode) {
 		case codes.OK:
-			log.Debugf("Sent job: %s to app", job.GetName())
+			log.Debugf("Sent job %s to app", job.GetName())
 		case codes.NotFound:
 			log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", job.GetName(), statusCode)
 		default:
