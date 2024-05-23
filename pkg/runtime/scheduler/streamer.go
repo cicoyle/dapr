@@ -145,8 +145,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}
 
-	switch s.isHTTP {
-	case true:
+	if s.isHTTP == true {
 		statusCode := int(response.Status().GetCode())
 		switch {
 		case statusCode >= 200 && statusCode <= 299:
@@ -158,7 +157,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		default:
 			log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 		}
-	default:
+	} else {
 		statusCode := response.Status().GetCode()
 		switch codes.Code(statusCode) {
 		case codes.OK:
