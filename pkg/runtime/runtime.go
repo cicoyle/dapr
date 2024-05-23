@@ -387,17 +387,17 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 
 func continuouslyRetrySchedulerClient(ctx context.Context, opts clients.Options) (*clients.Clients, error) {
 	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
 			cli, err := clients.New(ctx, opts)
 			if err == nil {
 				return cli, nil
 			}
 
-			log.Infof("Failed to initialize scheduler clients: %s. Retrying...", err)
-			time.Sleep(time.Second)
+			log.Errorf("Failed to initialize scheduler clients: %s. Retrying...", err)
+select {
+			case <- time.After(time.Second):
+			case <-ctx.Done():
+			  return nil, ctx.Error()
+			  }
 		}
 	}
 }
