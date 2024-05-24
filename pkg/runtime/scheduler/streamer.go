@@ -145,6 +145,8 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}
 
+	// TODO: standardize on the error code returned by both protocol channels,
+	// converting HTTP status codes to gRPC codes
 	if s.isHTTP == true {
 		statusCode := int(response.Status().GetCode())
 		switch {
