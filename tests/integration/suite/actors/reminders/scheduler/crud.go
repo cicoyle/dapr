@@ -80,6 +80,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
+	//nolint:goconst
 	daprdURL := "http://" + c.daprd.HTTPAddress() + "/v1.0/actors/myactortype/myactorid"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
 	require.NoError(t, err)
