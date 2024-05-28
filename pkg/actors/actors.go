@@ -235,7 +235,10 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
-	if opts.Config.SchedulerClients != nil && opts.SchedulerReminders {
+	if opts.SchedulerReminders {
+		if opts.Config.SchedulerClients == nil {
+			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
+		}
 		log.Info("Using Scheduler service for reminders.")
 		// We want to delete "a.actorsReminders" once we move to Scheduler service.
 		a.actorsReminders = reminders.NoOpReminders() // disable old reminder system if using Scheduler for reminders
