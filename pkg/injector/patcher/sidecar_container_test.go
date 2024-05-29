@@ -324,6 +324,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Namespace = "dapr-system"
 		c.OperatorAddress = "controlplane:9000"
 		c.PlacementAddress = "placement:50000"
+		c.SchedulerAddress = "scheduler:50006"
 		c.SentryAddress = "sentry:50000"
 		c.MTLSEnabled = true
 		c.Identity = "pod_identity"
@@ -354,6 +355,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--config", "config",
 			"--placement-host-address", "placement:50000",
+			"--scheduler-host-address", "placement:50006",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -387,6 +389,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Namespace = "dapr-system"
 		c.OperatorAddress = "controlplane:9000"
 		c.PlacementAddress = "placement:50000"
+		c.SchedulerAddress = "scheduler:50006"
 		c.SentryAddress = "sentry:50000"
 		c.MTLSEnabled = true
 		c.Identity = "pod_identity"
@@ -426,6 +429,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--config", "config",
 			"--placement-host-address", "placement:50000",
+			"--scheduler-host-address", "scheduler:50006",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -484,6 +488,55 @@ func TestGetSidecarContainer(t *testing.T) {
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
 				assert.Contains(t, args, "--placement-host-address some-host:50000")
+			},
+		},
+	}))
+
+	t.Run("scheduler", testSuiteGenerator([]testCase{
+		{
+			name: "scheduler is included in options",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SchedulerAddress = "scheduler:1234"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--scheduler-host-address scheduler:1234")
+			},
+		},
+		{
+			name: "scheduler is skipped in options",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SchedulerAddress = ""
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--scheduler-host-address")
+			},
+		},
+		{
+			name: "scheduler is skipped in options but included in annotations",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SchedulerAddress = ""
+			},
+			annotations: map[string]string{
+				annotations.KeySchedulerHostAddresses: "some-host:50006",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--scheduler-host-address some-host:50006")
+			},
+		},
+		{
+			name: "scheduler is set in options and overrriden in annotations",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SchedulerAddress = "scheduler:1234"
+			},
+			annotations: map[string]string{
+				annotations.KeySchedulerHostAddresses: "some-host:50000",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--scheduler-host-address some-host:50000")
 			},
 		},
 	}))
