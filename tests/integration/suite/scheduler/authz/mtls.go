@@ -63,9 +63,9 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "foo",
 			Namespace: "default",
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Job{
-					Job: new(schedulerv1pb.TypeJob),
+			Kind: &schedulerv1pb.JobMetadataKind{
+				Kind: &schedulerv1pb.JobMetadataKind_Job{
+					Job: new(schedulerv1pb.KindJob),
 				},
 			},
 		},
@@ -87,8 +87,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "foo",
 						Namespace: "default",
-						Type: &schedulerv1pb.JobMetadataType{
-							Type: &schedulerv1pb.JobMetadataType_Job{Job: new(schedulerv1pb.TypeJob)},
+						Kind: &schedulerv1pb.JobMetadataKind{
+							Kind: &schedulerv1pb.JobMetadataKind_Job{Job: new(schedulerv1pb.KindJob)},
 						},
 					},
 				})
@@ -101,8 +101,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "not-foo",
 						Namespace: "default",
-						Type: &schedulerv1pb.JobMetadataType{
-							Type: &schedulerv1pb.JobMetadataType_Job{Job: new(schedulerv1pb.TypeJob)},
+						Kind: &schedulerv1pb.JobMetadataKind{
+							Kind: &schedulerv1pb.JobMetadataKind_Job{Job: new(schedulerv1pb.KindJob)},
 						},
 					},
 				})
@@ -116,8 +116,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "foo",
 						Namespace: "default",
-						Type: &schedulerv1pb.JobMetadataType{
-							Type: &schedulerv1pb.JobMetadataType_Job{Job: new(schedulerv1pb.TypeJob)},
+						Kind: &schedulerv1pb.JobMetadataKind{
+							Kind: &schedulerv1pb.JobMetadataKind_Job{Job: new(schedulerv1pb.KindJob)},
 						},
 					},
 				})
@@ -129,8 +129,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "not-foo",
 						Namespace: "default",
-						Type: &schedulerv1pb.JobMetadataType{
-							Type: &schedulerv1pb.JobMetadataType_Job{Job: new(schedulerv1pb.TypeJob)},
+						Kind: &schedulerv1pb.JobMetadataKind{
+							Kind: &schedulerv1pb.JobMetadataKind_Job{Job: new(schedulerv1pb.KindJob)},
 						},
 					},
 				})
@@ -144,8 +144,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "foo",
 						Namespace: "default",
-						Type: &schedulerv1pb.JobMetadataType{
-							Type: &schedulerv1pb.JobMetadataType_Job{Job: new(schedulerv1pb.TypeJob)},
+						Kind: &schedulerv1pb.JobMetadataKind{
+							Kind: &schedulerv1pb.JobMetadataKind_Job{Job: new(schedulerv1pb.KindJob)},
 						},
 					},
 				})
@@ -157,8 +157,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "not-foo",
 						Namespace: "default",
-						Type: &schedulerv1pb.JobMetadataType{
-							Type: &schedulerv1pb.JobMetadataType_Job{Job: new(schedulerv1pb.TypeJob)},
+						Kind: &schedulerv1pb.JobMetadataKind{
+							Kind: &schedulerv1pb.JobMetadataKind_Job{Job: new(schedulerv1pb.KindJob)},
 						},
 					},
 				})

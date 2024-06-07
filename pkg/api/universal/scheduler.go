@@ -50,9 +50,9 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Job{
-					Job: new(schedulerv1pb.TypeJob),
+			Kind: &schedulerv1pb.JobMetadataKind{
+				Kind: &schedulerv1pb.JobMetadataKind_Job{
+					Job: new(schedulerv1pb.KindJob),
 				},
 			},
 		},
@@ -90,9 +90,9 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Job{
-					Job: new(schedulerv1pb.TypeJob),
+			Kind: &schedulerv1pb.JobMetadataKind{
+				Kind: &schedulerv1pb.JobMetadataKind_Job{
+					Job: new(schedulerv1pb.KindJob),
 				},
 			},
 		},
@@ -123,9 +123,9 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Job{
-					Job: new(schedulerv1pb.TypeJob),
+			Kind: &schedulerv1pb.JobMetadataKind{
+				Kind: &schedulerv1pb.JobMetadataKind_Job{
+					Job: new(schedulerv1pb.KindJob),
 				},
 			},
 		},
