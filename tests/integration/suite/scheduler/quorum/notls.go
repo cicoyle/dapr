@@ -115,9 +115,9 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     n.daprd.AppID(),
 			Namespace: n.daprd.Namespace(),
-			Kind: &schedulerv1pb.JobMetadataKind{
-				Kind: &schedulerv1pb.JobMetadataKind_Job{
-					Job: new(schedulerv1pb.KindJob),
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
 				},
 			},
 		},
