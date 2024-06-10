@@ -63,6 +63,20 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
 			AppPort:           -1,
+		},
+		{
+			AppName:           appNamePrefix + backend + "scheduler",
+			DaprEnabled:       true,
+			ImageName:         "perf-workflowsapp",
+			Replicas:          1,
+			IngressEnabled:    true,
+			IngressPort:       3000,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "800Mi",
+			DaprMemoryRequest: "800Mi",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "800Mi",
+			AppPort:           -1,
 			Config:            "featureactorreminderscheduler",
 		},
 	}
@@ -241,4 +255,13 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
+}
+
+// Runs tests for `100k_wf` with 100,000 iterations
+func TestWorkflowWith100KIterations(t *testing.T) {
+	workflowName := "100k_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_100000_1000"} // 100k workflows, 1k iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
