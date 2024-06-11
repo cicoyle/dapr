@@ -56,7 +56,7 @@ const possibleScenarios = {
         executor: 'shared-iterations',
         vus: 100000,
         iterations: 100,
-        maxDuration: '100000000s',
+        maxDuration: '10000000000s',
     },
 }
 
