@@ -19,6 +19,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/google/uuid"
+
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
@@ -35,11 +37,11 @@ type conn struct {
 	// idx is the uuid of a triggered job. We can use a simple counter as there
 	// are no privacy/time attack concerns as this counter is scoped to a single
 	// client.
-	idx uint64
+	idx string
 
 	// inflight tracks the jobs that have been sent to the client but have not
 	// been acked yet.
-	inflight map[uint64]chan struct{}
+	inflight map[string]chan struct{}
 
 	lock    sync.RWMutex
 	closeCh chan struct{}
@@ -51,7 +53,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 	conn := &conn{
 		pool:     p,
 		closeCh:  make(chan struct{}),
-		inflight: make(map[uint64]chan struct{}),
+		inflight: make(map[string]chan struct{}),
 		jobCh:    make(chan *schedulerv1pb.WatchJobsResponse, 10),
 	}
 
@@ -100,7 +102,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 // with a UUID corresponding to the job.
 func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 	c.lock.Lock()
-	c.idx++
+	c.idx = uuid.New().String()
 	ackCh := make(chan struct{}, 1)
 	c.inflight[c.idx] = ackCh
 	job := &schedulerv1pb.WatchJobsResponse{
@@ -134,7 +136,7 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 
 // handleJobProcessed acks the job with the given UUID. This is called when the
 // client sends back the result of the job to be acked.
-func (c *conn) handleJobProcessed(id uint64) {
+func (c *conn) handleJobProcessed(id string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

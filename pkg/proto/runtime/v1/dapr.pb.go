@@ -6398,7 +6398,7 @@ func (x *ScheduleJobRequest) GetJob() *Job {
 	return nil
 }
 
-// ScheduleJobResponse is the message to create/schedule the job.
+// ScheduleJobResponse is the message response to create/schedule the job.
 type ScheduleJobResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6584,7 +6584,7 @@ func (x *DeleteJobRequest) GetName() string {
 	return ""
 }
 
-// DeleteJobResponse is the message to delete the job by name.
+// DeleteJobResponse is the message response to delete the job by name.
 type DeleteJobResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

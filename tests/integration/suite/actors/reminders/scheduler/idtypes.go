@@ -204,6 +204,8 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		i.lock.Lock()
+		defer i.lock.Unlock()
 		assert.ElementsMatch(c, i.expcalled, i.methodcalled)
 	}, time.Second*20, time.Millisecond*10)
 }
