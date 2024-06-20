@@ -88,7 +88,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 				return
 			}
 
-			conn.handleJobProcessed(resp.GetResult().GetUuid())
+			conn.handleJobProcessed(resp.GetResult().GetId())
 		}
 	}()
 
@@ -105,7 +105,7 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 	c.inflight[c.idx] = ackCh
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name:     jobEvt.Name,
-		Uuid:     c.idx,
+		Id:       c.idx,
 		Data:     jobEvt.Data,
 		Metadata: jobEvt.Metadata,
 	}
@@ -113,7 +113,7 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 
 	defer func() {
 		c.lock.Lock()
-		delete(c.inflight, job.GetUuid())
+		delete(c.inflight, job.GetId())
 		c.lock.Unlock()
 	}()
 
