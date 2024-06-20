@@ -20,7 +20,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -41,9 +40,9 @@ type Pool struct {
 
 type namespacedPool struct {
 	idx       atomic.Uint64
-	appID     map[string][]string
-	actorType map[string][]string
-	conns     map[string]*conn
+	appID     map[string][]uint64
+	actorType map[string][]uint64
+	conns     map[uint64]*conn
 }
 
 // JobEvent is a triggered job event.
@@ -80,35 +79,30 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	nsPool, ok := p.nsPool[req.GetNamespace()]
 	if !ok {
 		nsPool = &namespacedPool{
-			appID:     make(map[string][]string),
-			actorType: make(map[string][]string),
-			conns:     make(map[string]*conn),
+			appID:     make(map[string][]uint64),
+			actorType: make(map[string][]uint64),
+			conns:     make(map[uint64]*conn),
 		}
 
 		p.nsPool[req.GetNamespace()] = nsPool
 	}
 
 	ok = true
-	var uuidStr string
+	var uuid uint64
 	for ok {
-		var uuidObj uuid.UUID
-		uuidObj, err := uuid.NewRandom()
-		uuidStr = uuidObj.String()
-		if err != nil {
-			log.Errorf("failed to generate UUID: %w", err)
-		}
-		_, ok = nsPool.conns[uuidStr]
+		uuid++
+		_, ok = nsPool.conns[uuid]
 	}
 
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
-	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuidStr)
+	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuid)
 
 	for _, actorType := range req.GetActorTypes() {
 		log.Debugf("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
-		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuidStr)
+		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuid)
 	}
 
-	nsPool.conns[uuidStr] = p.newConn(req, stream, uuidStr)
+	nsPool.conns[uuid] = p.newConn(req, stream, uuid)
 }
 
 // Send is a blocking function that sends a job trigger to a correct job
@@ -125,7 +119,7 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) error {
 }
 
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid string) {
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -139,11 +133,11 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid string) {
 		return
 	}
 
-	delete(nsPool.conns, uuid)
+	delete(nsPool.conns, id)
 
 	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	for i := 0; i < len(appIDConns); i++ {
-		if appIDConns[i] == uuid {
+		if appIDConns[i] == id {
 			appIDConns = append(appIDConns[:i], appIDConns[i+1:]...)
 			break
 		}
@@ -159,7 +153,7 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid string) {
 
 		log.Infof("Removing a Sidecar connection from Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
 		for i := 0; i < len(actorTypeConns); i++ {
-			if actorTypeConns[i] == uuid {
+			if actorTypeConns[i] == id {
 				actorTypeConns = append(actorTypeConns[:i], actorTypeConns[i+1:]...)
 				break
 			}
