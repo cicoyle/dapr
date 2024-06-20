@@ -47,7 +47,7 @@ type conn struct {
 
 // newConn creates a new connection and starts the goroutines to handle sending
 // jobs to the client and receiving job process results from the client.
-func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, uuid uint64) *conn {
+func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, uuid string) *conn {
 	conn := &conn{
 		pool:     p,
 		closeCh:  make(chan struct{}),

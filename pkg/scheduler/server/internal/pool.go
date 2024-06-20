@@ -17,10 +17,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -41,9 +41,9 @@ type Pool struct {
 
 type namespacedPool struct {
 	idx       atomic.Uint64
-	appID     map[string][]uint64
-	actorType map[string][]uint64
-	conns     map[uint64]*conn
+	appID     map[string][]string
+	actorType map[string][]string
+	conns     map[string]*conn
 }
 
 // JobEvent is a triggered job event.
@@ -80,30 +80,35 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	nsPool, ok := p.nsPool[req.GetNamespace()]
 	if !ok {
 		nsPool = &namespacedPool{
-			appID:     make(map[string][]uint64),
-			actorType: make(map[string][]uint64),
-			conns:     make(map[uint64]*conn),
+			appID:     make(map[string][]string),
+			actorType: make(map[string][]string),
+			conns:     make(map[string]*conn),
 		}
 
 		p.nsPool[req.GetNamespace()] = nsPool
 	}
 
 	ok = true
-	var uuid uint64
+	var uuidStr string
 	for ok {
-		uuid = rand.Uint64() //nolint:gosec
-		_, ok = nsPool.conns[uuid]
+		var uuidObj uuid.UUID
+		uuidObj, err := uuid.NewRandom()
+		uuidStr = uuidObj.String()
+		if err != nil {
+			log.Errorf("failed to generate UUID: %w", err)
+		}
+		_, ok = nsPool.conns[uuidStr]
 	}
 
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
-	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuid)
+	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuidStr)
 
 	for _, actorType := range req.GetActorTypes() {
 		log.Debugf("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
-		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuid)
+		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuidStr)
 	}
 
-	nsPool.conns[uuid] = p.newConn(req, stream, uuid)
+	nsPool.conns[uuidStr] = p.newConn(req, stream, uuidStr)
 }
 
 // Send is a blocking function that sends a job trigger to a correct job
@@ -120,7 +125,7 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) error {
 }
 
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid string) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
