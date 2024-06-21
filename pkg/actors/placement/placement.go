@@ -191,6 +191,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 		for healthy := range ch {
 			p.appHealthy.Store(healthy)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 		}
 	}()
 
@@ -199,6 +204,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	go func() {
 		defer p.shutdownConnLoop.Done()
 		for p.running.Load() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			// wait until disconnection occurs or shutdown is triggered
 			p.client.waitUntil(func(streamConnAlive bool) bool {
 				return !streamConnAlive || !p.running.Load()
@@ -216,6 +226,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	go func() {
 		defer p.shutdownConnLoop.Done()
 		for p.running.Load() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
 				return streamAlive || !p.running.Load()
@@ -243,6 +258,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	go func() {
 		defer p.shutdownConnLoop.Done()
 		for p.running.Load() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
 				return streamAlive || !p.running.Load()
