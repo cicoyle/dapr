@@ -88,21 +88,21 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	}
 
 	ok = true
-	var uuid uint64
+	var id uint64
 	for ok {
-		uuid++
-		_, ok = nsPool.conns[uuid]
+		id++
+		_, ok = nsPool.conns[id]
 	}
 
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
-	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuid)
+	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], id)
 
 	for _, actorType := range req.GetActorTypes() {
 		log.Debugf("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
-		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuid)
+		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], id)
 	}
 
-	nsPool.conns[uuid] = p.newConn(req, stream, uuid)
+	nsPool.conns[id] = p.newConn(req, stream, id)
 }
 
 // Send is a blocking function that sends a job trigger to a correct job
