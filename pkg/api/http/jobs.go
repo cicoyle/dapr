@@ -14,14 +14,18 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
-
-	"github.com/go-chi/chi/v5"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/go-chi/chi/v5"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 var endpointGroupJobsV1Alpha1 = &endpoints.EndpointGroup{
@@ -65,7 +69,42 @@ func (a *api) constructJobsEndpoints() []endpoints.Endpoint {
 	}
 }
 
-func (a *api) onCreateScheduleHandler() http.HandlerFunc {
+func (a *api) onCreateScheduleHandler(w http.ResponseWriter, r *http.Request) http.HandlerFunc {
+	// do some manual transformation first then use handler
+
+	if r.Body != nil {
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, fmt.Sprintf("failed to decode request body: %v", err), http.StatusBadRequest)
+		}
+
+		if data, ok := body["data"]; ok {
+			// Modify the request body to include "@type" and "value"
+			dataWrapped := map[string]interface{}{
+				"@type": "",
+				"value": data,
+			}
+			// Update the body with the transformed data
+			body["data"] = dataWrapped
+
+			// Replace the request body with the transformed JSON
+
+			// Serialize data to JSON bytes
+			//dataBytes, err := json.Marshal(data)
+			//if err != nil {
+			//	http.Error(w, fmt.Sprintf("failed to marshal data to JSON: %v", err), http.StatusInternalServerError)
+			//}
+
+		}
+		// Re-encode the modified body to JSON
+		transformedBody, err := json.Marshal(body)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to marshal transformed body to JSON: %v", err), http.StatusInternalServerError)
+		}
+		// Replace the request body with the transformed JSON
+		r.Body = io.NopCloser(bytes.NewReader(transformedBody))
+
+	}
 	return UniversalHTTPHandler(
 		a.universal.ScheduleJobRequestAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.Job, *runtimev1pb.ScheduleJobResponse]{
@@ -81,6 +120,34 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 
 				in.Name = name
 
+				if a.universal.AppConnectionConfig().Protocol.IsHTTP() {
+					if in.GetData() != nil {
+						dataBytes, err := in.GetData().UnmarshalNew()
+						if err != nil {
+							return nil, fmt.Errorf("failed to unmarshal data: %w", err)
+						}
+
+						// Serialize the proto.Message to []byte
+						dataBytesAsJSON, err := json.Marshal(dataBytes)
+						if err != nil {
+							return nil, fmt.Errorf("failed to marshal data to JSON: %w", err)
+						}
+						// Assuming data is JSON or can be interpreted as such
+						if json.Valid(dataBytesAsJSON) {
+							// Data is valid JSON; you can directly use it
+							//in.Data = &anypb.Any{Value: in.GetData()}
+							// here set everything from input as data value
+							in.Data = &anypb.Any{
+								Value: dataBytesAsJSON,
+							}
+
+						} else {
+							// Handle non-JSON data or error case
+							return nil, fmt.Errorf("data is not valid JSON")
+						}
+					}
+				}
+
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.ScheduleJobResponse) (any, error) {
@@ -89,6 +156,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 			},
 		},
 	)
+
 }
 
 func (a *api) onDeleteJobHandler() http.HandlerFunc {

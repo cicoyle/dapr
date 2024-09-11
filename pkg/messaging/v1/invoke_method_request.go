@@ -241,15 +241,27 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 	// Clone the object
 	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
 
-	// Read the data and store it in the object
-	data, err := imr.RawDataFull()
-	if err != nil {
-		return m, err
-	}
+	if imr.dataObject != nil {
+		if anyData, ok := imr.dataObject.(*anypb.Any); ok {
+			if m.Message.Data == nil {
+				m.Message.Data = &anypb.Any{}
+			}
+			m.Message.Data.Value = anyData.GetValue()
+			m.Message.Data.TypeUrl = anyData.GetTypeUrl()
+		} else {
+			return nil, errors.New("dataObject is not a valid proto.Message")
+		}
+	} else {
+		// Read the data and store it in the object
+		data, err := imr.RawDataFull()
+		if err != nil {
+			return m, err
+		}
 
-	m.Message.Data = &anypb.Any{
-		Value:   data,
-		TypeUrl: imr.dataTypeURL, // Could be empty
+		m.Message.Data = &anypb.Any{
+			Value:   data,
+			TypeUrl: imr.dataTypeURL, // Could be empty
+		}
 	}
 
 	return m, nil
@@ -307,12 +319,9 @@ func (imr *InvokeMethodRequest) RawData() (r io.Reader) {
 	if imr.HasMessageData() {
 		return bytes.NewReader(m.GetData().GetValue())
 	}
-
-	if imr.ContentType() == "application/json" {
-		if dataObject := imr.GetDataObject(); dataObject != nil {
-			if anyData, ok := dataObject.(*anypb.Any); ok {
-				return bytes.NewReader(anyData.GetValue())
-			}
+	if dataObject := imr.GetDataObject(); dataObject != nil {
+		if anyData, ok := dataObject.(*anypb.Any); ok {
+			return bytes.NewReader(anyData.GetValue())
 		}
 	}
 
