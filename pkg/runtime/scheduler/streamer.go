@@ -144,7 +144,9 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).
 		WithHTTPExtension(http.MethodPost, "").
-		WithDataObject(job.GetData())
+		WithRawDataObject(job.GetData()).
+		WithContentType(invokev1.JSONContentType)
+
 	defer req.Close()
 
 	response, err := appChannel.TriggerJob(ctx, req)

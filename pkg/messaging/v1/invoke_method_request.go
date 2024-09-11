@@ -126,6 +126,12 @@ func (imr *InvokeMethodRequest) WithDataObject(data any) *InvokeMethodRequest {
 	return res
 }
 
+// WithRawDataObject sets message from an object which will be serialized as JSON
+func (imr *InvokeMethodRequest) WithRawDataObject(data any) *InvokeMethodRequest {
+	imr.dataObject = data
+	return imr
+}
+
 // WithContentType sets the content type.
 func (imr *InvokeMethodRequest) WithContentType(contentType string) *InvokeMethodRequest {
 	imr.r.Message.ContentType = contentType
@@ -240,6 +246,7 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 	if err != nil {
 		return m, err
 	}
+
 	m.Message.Data = &anypb.Any{
 		Value:   data,
 		TypeUrl: imr.dataTypeURL, // Could be empty
@@ -299,6 +306,14 @@ func (imr *InvokeMethodRequest) RawData() (r io.Reader) {
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
 		return bytes.NewReader(m.GetData().GetValue())
+	}
+
+	if imr.ContentType() == "application/json" {
+		if dataObject := imr.GetDataObject(); dataObject != nil {
+			if anyData, ok := dataObject.(*anypb.Any); ok {
+				return bytes.NewReader(anyData.GetValue())
+			}
+		}
 	}
 
 	return imr.replayableRequest.RawData()
