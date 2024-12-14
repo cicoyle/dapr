@@ -21,6 +21,8 @@ import (
 	"net"
 	"sync/atomic"
 
+	"github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/utils"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -81,11 +83,24 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 
+	var hostAddress string
+
+	// Cassie TODO: use listenAddress string instead of getHostAddress
+	if hostAddress, err = utils.GetHostAddress(); err != nil {
+		return nil, fmt.Errorf("failed to determine host address: %w", err)
+	}
+
 	cron := cron.New(cron.Options{
 		ReplicaCount: opts.ReplicaCount,
 		ReplicaID:    opts.ReplicaID,
 		Config:       config,
 		Healthz:      opts.Healthz,
+		Host:         hostAddress,
+		Port:         uint32(opts.Port),
+		ReplicaData: &internals.SchedulerPartitionOwner{
+			Host: hostAddress,
+			Port: uint32(opts.Port),
+		},
 	})
 
 	var ctrl concurrency.Runner

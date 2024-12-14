@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -157,7 +158,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 	}, nil
 }
 
-// WatchJobs sends jobs to Dapr sidecars upon component changes.
+// WatchJobs sends jobs to Dapr sidecars.
 func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
 	initial, err := s.serializer.FromWatch(stream)
 	if err != nil {
@@ -176,6 +177,50 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	case <-stream.Context().Done():
 		return stream.Context().Err()
 	}
+}
+
+// WatchHosts is used by Dapr sidecars to dynamically know about the available Scheduler instances, so as they scale
+// up or down the sidecar knows the total set of Schedulers that exist dynamically
+func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+	ctx := stream.Context()
+
+	client, err := s.cron.Client(ctx)
+	if err != nil {
+		return err
+	}
+	leadershipUpdatesCh := client.WatchLeadership(ctx)
+	defer close(leadershipUpdatesCh)
+	for {
+		select {
+		case <-s.closeCh:
+			return errors.New("server is closing")
+		case <-ctx.Done():
+			return ctx.Err()
+		case activeSchedulers := <-leadershipUpdatesCh:
+			hosts := convertToHostPorts(activeSchedulers)
+			response := &schedulerv1pb.WatchHostsResponse{
+				Hosts: hosts,
+			}
+
+			// stream the active Scheduler host + ports to daprd sidecars
+			if err := stream.Send(response); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func convertToHostPorts(activeSchedulers []*anypb.Any) []*schedulerv1pb.HostPort {
+	hosts := make([]*schedulerv1pb.HostPort, len(activeSchedulers))
+	for i, activeScheds := range activeSchedulers {
+		hostPort := &schedulerv1pb.HostPort{}
+		if err := activeScheds.UnmarshalTo(hostPort); err != nil {
+			log.Errorf("failed to unmarshal Scheduler host + ports")
+			continue
+		}
+		hosts[i] = hostPort
+	}
+	return hosts
 }
 
 //nolint:protogetter

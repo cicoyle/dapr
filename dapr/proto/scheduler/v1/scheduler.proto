@@ -4,6 +4,7 @@ package dapr.proto.scheduler.v1;
 
 import "dapr/proto/scheduler/v1/failurepolicy.proto";
 import "google/protobuf/any.proto";
+import "dapr/proto/internals/v1/scheduler.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
 
@@ -19,6 +20,9 @@ service Scheduler {
   rpc WatchJobs(stream WatchJobsRequest) returns (stream WatchJobsResponse) {}
   // ListJobs is used by the daprd sidecar to list all jobs.
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
+  // WatchHosts is used by the daprd sidecars to dynamically get the current set of all active Scheduler instances to
+  // keep the sidecars updated as Schedulers scale up or down
+  rpc WatchHosts(WatchHostsRequest) returns (stream WatchHostsResponse) {}
 }
 
 message Job {
@@ -205,3 +209,12 @@ message ListJobsResponse {
   // The list of jobs.
   repeated NamedJob jobs = 1;
 }
+
+message HostPort {
+  string host = 1;
+  uint32 port = 2;
+}
+message WatchHostsResponse {
+  repeated HostPort hosts = 1;
+}
+message WatchHostsRequest {}

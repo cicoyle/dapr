@@ -70,8 +70,15 @@ func (m *Manager) Run(ctx context.Context) error {
 		return errors.New("scheduler manager is already running")
 	}
 
+	changeChan := m.clients.RegisterChangeListener()
+	var jobCtx context.Context
+	var jobCancel context.CancelFunc
+
+	jobCtx, jobCancel = context.WithCancel(ctx)
+	defer jobCancel()
 	for {
-		if err := m.watchJobs(ctx); err != nil {
+
+		if err := m.watchJobs(jobCtx); err != nil {
 			// don't retry if closing down
 			if ctx.Err() != nil {
 				return nil //nolint:nilerr
@@ -86,6 +93,38 @@ func (m *Manager) Run(ctx context.Context) error {
 		// don't retry if closing down
 		if ctx.Err() != nil {
 			return nil //nolint:nilerr
+		}
+		// Cassie, maybe update this to not use a changenotifier
+		select {
+		case <-ctx.Done():
+			//if jobCancel != nil {
+			//	jobCancel()
+			//}
+			return nil
+		case <-changeChan:
+			// Host change detected, re-run watchJobs
+			log.Info("Detected change in Scheduler clients, refreshing job watcher.")
+			// Cancel the existing watchJobs instance
+			//if jobCancel != nil {
+			jobCancel()
+			//}
+			jobCtx, jobCancel = context.WithCancel(ctx)
+			continue
+		}
+	}
+}
+
+func (m *Manager) watchHostChanges(ctx context.Context, changeChan <-chan struct{}) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-changeChan:
+			// Schedulers scaled up or down, update clients
+			log.Info("Detected change in Scheduler clients, refreshing job watchers.")
+			if err := m.watchJobs(ctx); err != nil {
+				log.Errorf("Failed to refresh job watchers: %v", err)
+			}
 		}
 	}
 }

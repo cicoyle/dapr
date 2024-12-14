@@ -19,22 +19,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/diagridio/go-etcd-cron/api"
-	etcdcron "github.com/diagridio/go-etcd-cron/cron"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
-
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/diagridio/go-etcd-cron/api"
+	etcdcron "github.com/diagridio/go-etcd-cron/cron"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 type Options struct {
+	Host         string
+	Port         uint32
 	ReplicaCount uint32
 	ReplicaID    uint32
 	Config       *embed.Config
@@ -55,6 +58,8 @@ type Interface interface {
 }
 
 type cron struct {
+	host         string
+	port         uint32
 	replicaCount uint32
 	replicaID    uint32
 
@@ -68,6 +73,8 @@ type cron struct {
 
 func New(opts Options) Interface {
 	return &cron{
+		host:         opts.Host,
+		port:         opts.Port,
 		replicaCount: opts.ReplicaCount,
 		replicaID:    opts.ReplicaID,
 		config:       opts.Config,
@@ -107,7 +114,13 @@ func (c *cron) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
+	replicaData, err := anypb.New(&internals.SchedulerPartitionOwner{
+		Host: c.host,
+		Port: c.port,
+	})
+	if err != nil {
+		return err
+	}
 	// pass in initial cluster endpoints, but with client ports
 	c.etcdcron, err = etcdcron.New(etcdcron.Options{
 		Client:         client,
@@ -115,6 +128,7 @@ func (c *cron) Run(ctx context.Context) error {
 		PartitionID:    c.replicaID,
 		PartitionTotal: c.replicaCount,
 		TriggerFn:      c.triggerJob,
+		ReplicaData:    replicaData,
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
