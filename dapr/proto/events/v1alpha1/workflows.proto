@@ -39,21 +39,21 @@ message WorkflowsEvent {
     ExecutionCanceledEvent execution_canceled = 8; // Dapr-specific event not in durabletask-protobuf
 
     // Task events (AKA Workflow Activities) from durabletask-protobuf
-    durabletask.protos.orchestrator.v1.TaskScheduledEvent task_scheduled = 11;
-    durabletask.protos.orchestrator.v1.TaskCompletedEvent task_completed = 12;
-    durabletask.protos.orchestrator.v1.TaskFailedEvent task_failed = 13;
+    durabletask.protos.orchestrator.v1.TaskScheduledEvent task_scheduled = 9;
+    durabletask.protos.orchestrator.v1.TaskCompletedEvent task_completed = 10;
+    durabletask.protos.orchestrator.v1.TaskFailedEvent task_failed = 11;
     
     // Timer events from durabletask-protobuf
-    durabletask.protos.orchestrator.v1.TimerCreatedEvent timer_created = 21;
-    durabletask.protos.orchestrator.v1.TimerFiredEvent timer_fired = 22;
+    durabletask.protos.orchestrator.v1.TimerCreatedEvent timer_created = 12;
+    durabletask.protos.orchestrator.v1.TimerFiredEvent timer_fired = 13;
 
     // Sub-orchestration events (AKA Child Workflows) from durabletask-protobuf
-    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceCreatedEvent sub_orchestration_created = 31;
-    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceCompletedEvent sub_orchestration_completed = 32;
-    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceFailedEvent sub_orchestration_failed = 33;
+    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceCreatedEvent sub_orchestration_created = 14;
+    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceCompletedEvent sub_orchestration_completed = 15;
+    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceFailedEvent sub_orchestration_failed = 16;
     
     // Event handling events from durabletask-protobuf
-    durabletask.protos.orchestrator.v1.EventRaisedEvent event_raised = 34;
+    durabletask.protos.orchestrator.v1.EventRaisedEvent event_raised = 17;
   }
 }
 
