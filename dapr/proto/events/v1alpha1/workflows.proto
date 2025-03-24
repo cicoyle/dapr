@@ -1,0 +1,78 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.events.v1alpha1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/duration.proto";
+
+import "github.com/dapr/durabletask-go/api/protos/orchestrator_service.proto";
+import "github.com/dapr/durabletask-go/api/protos/backend_service.proto";
+
+// Main message containing all possible workflow events
+message WorkflowsEvent {
+  // Metadata about the workflow instance
+  durabletask.protos.backend.v1.OrchestrationMetadata metadata = 1;
+
+  oneof event_type {
+    // Workflow Execution events from durabletask-protobuf
+    durabletask.protos.orchestrator.v1.ExecutionStartedEvent execution_started = 2;
+    durabletask.protos.orchestrator.v1.ExecutionCompletedEvent execution_completed = 3;
+    durabletask.protos.orchestrator.v1.ExecutionTerminatedEvent execution_terminated = 4;
+    durabletask.protos.orchestrator.v1.ExecutionSuspendedEvent execution_suspended = 5;
+    durabletask.protos.orchestrator.v1.ExecutionResumedEvent execution_resumed = 6;
+    ExecutionFailedEvent execution_failed = 7; // Dapr-specific event not in durabletask-protobuf
+    ExecutionCanceledEvent execution_canceled = 8; // Dapr-specific event not in durabletask-protobuf
+
+    // Task events (AKA Workflow Activities) from durabletask-protobuf
+    durabletask.protos.orchestrator.v1.TaskScheduledEvent task_scheduled = 11;
+    durabletask.protos.orchestrator.v1.TaskCompletedEvent task_completed = 12;
+    durabletask.protos.orchestrator.v1.TaskFailedEvent task_failed = 13;
+    
+    // Timer events from durabletask-protobuf
+    durabletask.protos.orchestrator.v1.TimerCreatedEvent timer_created = 21;
+    durabletask.protos.orchestrator.v1.TimerFiredEvent timer_fired = 22;
+
+    // Sub-orchestration events (AKA Child Workflows) from durabletask-protobuf
+    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceCreatedEvent sub_orchestration_created = 31;
+    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceCompletedEvent sub_orchestration_completed = 32;
+    durabletask.protos.orchestrator.v1.SubOrchestrationInstanceFailedEvent sub_orchestration_failed = 33;
+    
+    // Event handling events from durabletask-protobuf
+    durabletask.protos.orchestrator.v1.EventRaisedEvent event_raised = 34;
+  }
+}
+
+// Dapr-specific event not in durabletask-protobuf
+message ExecutionFailedEvent {
+  durabletask.protos.orchestrator.v1.OrchestrationInstance orchestration_instance = 1;
+  FailureDetails failure_details = 2;
+  string reason = 3;
+}
+
+// Dapr-specific event not in durabletask-protobuf
+message ExecutionCanceledEvent {
+  durabletask.protos.orchestrator.v1.OrchestrationInstance orchestration_instance = 1;
+  string reason = 2;
+}
+
+message FailureDetails {
+  string error_type = 1;
+  string error_message = 2;
+  bool is_transient = 3;
+  map<string, string> details = 4;
+}

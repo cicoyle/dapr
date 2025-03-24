@@ -1,0 +1,50 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.events.v1alpha1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "dapr/proto/events/v1alpha1/workflows.proto";
+import "dapr/proto/events/v1alpha1/actors.proto";
+import "dapr/proto/events/v1alpha1/jobs.proto";
+import "dapr/proto/events/v1alpha1/components.proto";
+import "dapr/proto/events/v1alpha1/dapr.proto";
+import "dapr/proto/events/v1alpha1/health.proto";
+
+// SinkEventsAlpha is the service non-Dapr applications implement to receive events from Dapr instances
+service SinkEventsAlpha {
+  // OnEventAlpha1 receives events from Dapr instances. The application must serve this endpoint with mTLS using a Sentry-issued certificate.
+  rpc OnEventAlpha1(stream EventRequest) returns (EventResponse);
+}
+
+message EventRequest {
+  google.protobuf.Timestamp time = 1;
+  Event event = 2;
+}
+
+message Event {
+  oneof type {
+    WorkflowsEvent workflow = 1;      // From workflows.dapr.io/v1
+    ActorsEvent actor = 2;            // From actors.dapr.io/v1
+    JobsEvent job = 3;                // From jobs.dapr.io/v1
+    ComponentsEvent component = 4;    // From components.dapr.io/v1
+    DaprEvent dapr = 5;               // From core.dapr.io/v1
+    HealthEvent health = 6;           // For: Dapr sidecar, components, control plane services
+    // add more below
+  }
+}
+
+message EventResponse {}

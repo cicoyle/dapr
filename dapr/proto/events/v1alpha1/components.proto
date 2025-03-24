@@ -1,0 +1,77 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.events.v1alpha1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+// Component is the base message containing common fields for all component events
+message Component {
+  string name = 1;
+  string namespace = 2;
+  repeated string scopes = 3;  // App IDs this component is limited to
+  string version = 4;
+  int32 init_timeout = 5;     // Timeout duration in seconds
+  map<string, string> metadata = 6;  // Component-specific configuration
+}
+
+// Main message containing all possible components events
+message ComponentsEvent {
+  oneof event_type {
+    Initialized initialized = 1;
+    Closed closed = 2;
+    Error error = 3;
+  }
+}
+
+message Initialized {
+  Component component = 1;
+  // Component-specific initialization details
+  oneof type {
+    Binding binding = 2;
+    PubSub pubsub = 3;
+    SecretStore secret_store = 4;
+    StateStore state_store = 5;
+  }
+}
+
+message Closed {
+  Component component = 1;
+}
+
+message Error {
+  Component component = 1;
+  string error = 2;
+}
+
+message Binding {
+  bool is_input = 1;
+  bool is_output = 2;
+  string route = 3;
+}
+
+message PubSub {
+  string consumer_id = 1;
+  // Relevant details tbd
+}
+
+message SecretStore {
+  // Relevant details tbd
+}
+
+message StateStore {
+  // Relevant details tbd
+}
