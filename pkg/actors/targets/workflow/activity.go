@@ -149,7 +149,32 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		return nil, a.purgeActivityState(ctx)
 	}
 
-	// The actual execution is triggered by a reminder
+	// The actual execution is triggered by a reminder, but only if this activity is hosted locally
+	targetAppID := his.GetAppId()
+	var activityActorType string
+	var method string
+	if targetAppID != "" && targetAppID != a.appID {
+		if his.GetTaskScheduled() != nil {
+			// need to execute app2 activity on app2
+			// TODO: change this to the value received from durabletask, but for now this is ok
+			activityActorType = fmt.Sprintf("dapr.internal.default.%s.activity", a.appID)
+			method = "Execute"
+			log.Debugf("Activity actor '%s': executing activity '%s' with state: %+v\n", a.actorID, his.GetTaskScheduled().GetName(), &his)
+		} else if his.GetTaskCompleted() != nil || his.GetTaskFailed() != nil {
+			log.Debugf("Activity actor '%s': executing activity '%s' with state: %+v\n", a.actorID, his.GetTaskCompleted(), &his)
+			activityActorType = fmt.Sprintf("dapr.internal.default.%s.workflow", targetAppID)
+			method = "AddWorkflowEvent"
+		}
+		log.Debugf("cassie: activityActorType: %s && method: %s", activityActorType, method)
+		_, err := a.router.Call(ctx, internalsv1pb.
+			NewInternalInvokeRequest(method).
+			WithActor(activityActorType, a.actorID).
+			WithData(msg.GetData().GetValue()).
+			WithContentType(invokev1.ProtobufContentType),
+		)
+		return nil, err
+	}
+	// If local, create the reminder as usual
 	return nil, a.createReliableReminder(ctx, &his)
 }
 
@@ -162,6 +187,7 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		return fmt.Errorf("failed to decode activity reminder: %w", err)
 	}
 
+	log.Debugf("Activity actor '%s': executing activity '%s' with state: %+v\n", a.actorID, reminder.Name, &state)
 	completed, err := a.executeActivity(ctx, reminder.Name, &state)
 	if completed == runCompletedTrue {
 		a.table.DeleteFromTableIn(a, 0)
@@ -270,13 +296,39 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		return runCompletedTrue, err
 	}
 
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(a.workflowActorType, workflowID).
-		WithData(resultData).
-		WithContentType(invokev1.ProtobufContentType)
+	//Cassie NOTE: HERE we execcute our activities, then need to send the result back to the parent workflow after accomplishing it, dont send to app1 to execute just send result back
 
-	_, err = a.router.Call(ctx, req)
+	// Only send AddWorkflowEvent to orchestrator if the event is a completion (success or failure)
+	if wi.Result.GetTaskCompleted() != nil || wi.Result.GetTaskFailed() != nil {
+		// Determine the orchestrator's appID from the parent HistoryEvent
+		orchestratorAppID := ""
+		if taskEvent.GetAppId() != "" {
+			orchestratorAppID = taskEvent.GetAppId()
+		}
+		log.Debugf("cassie taskEvent: %+v\n", taskEvent)
+		log.Debugf("cassie orchestratorAppID: %+v\n", orchestratorAppID)
+		if orchestratorAppID == "" {
+			return runCompletedTrue, fmt.Errorf("cannot determine orchestrator appID for workflow with instanceId '%s'", wi.InstanceID)
+		}
+
+		workflowActorType := fmt.Sprintf("dapr.internal.default.%s.workflow", orchestratorAppID)
+		log.Infof("[CROSSAPP] Sending AddWorkflowEvent to workflow actor type: %s, workflowID: %s, orchestratorAppID: %s, event: %+v", workflowActorType, workflowID, orchestratorAppID, wi.Result)
+		req := internalsv1pb.
+			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+			WithActor(workflowActorType, workflowID).
+			WithData(resultData).
+			WithContentType(invokev1.ProtobufContentType)
+
+		_, err = a.router.Call(ctx, req)
+		if err != nil {
+			log.Errorf("[CROSSAPP] Failed to deliver AddWorkflowEvent to orchestrator: %v", err)
+		} else {
+			log.Infof("[CROSSAPP] Successfully delivered AddWorkflowEvent to orchestrator")
+		}
+	} else {
+		// TODO: look into other types here and ensure that is it
+	}
+
 	switch {
 	case err != nil:
 		// Returning recoverable error, record metrics
