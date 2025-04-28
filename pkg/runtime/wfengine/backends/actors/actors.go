@@ -66,6 +66,7 @@ type Options struct {
 
 type Actors struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -85,6 +86,7 @@ type Actors struct {
 func New(opts Options) *Actors {
 	return &Actors{
 		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		actors:                    opts.Actors,
@@ -108,6 +110,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	workflowFactory, err := workflow.WorkflowFactory(ctx, workflow.WorkflowOptions{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -131,6 +134,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	activityFactory, err := workflow.ActivityFactory(ctx, workflow.ActivityOptions{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -226,11 +230,22 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	if err != nil {
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
+	log.Debugf("CreateOrchestrationInstance sending event to workflow actor %s for event: %+v", abe.getTargetActorType(abe.appID, WorkflowNameLabelKey), e)
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
+	// Determine appID for cross/multi-app scenarios
+	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
+	// Use appID from event if present, else default is the current appID
+	appID := abe.appID
+	if e != nil && e.GetAppId() != "" {
+		appID = e.GetAppId()
+	}
+	actorType := abe.getTargetActorType(appID, WorkflowNameLabelKey)
+	log.Debugf("[multiapp] actorType resolved: %s (appID: %s)", actorType, appID)
+
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
-		WithActor(abe.workflowActorType, workflowInstanceID).
+		WithActor(actorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
@@ -240,8 +255,11 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		return err
 	}
 
+	// update target here
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, req)
+		fmt.Printf("here1. err: %s\n", err)
+
 		status, ok := status.FromError(eerr)
 		if ok && status.Code() == codes.FailedPrecondition {
 			return eerr
@@ -325,9 +343,16 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	}
 
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
+	// Determine appID for cross/multi-app scenarios
+	log.Debugf("AddNewOrchestrationEvent sending event to workflow actor %s for event: %+v", abe.getTargetActorType(abe.appID, WorkflowNameLabelKey), e)
+	actorType := abe.getTargetActorType(abe.appID, WorkflowNameLabelKey)
+	if actorType == "" {
+		actorType = abe.workflowActorType
+	}
+
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(abe.workflowActorType, string(id)).
+		WithActor(actorType, string(id)).
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
@@ -335,9 +360,11 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	if err != nil {
 		return err
 	}
-
+	// here
 	start := time.Now()
 	_, err = router.Call(ctx, req)
+	fmt.Printf("here0. err: %s\n", err)
+	log.Debugf("AddNewOrchestrationEvent response: %+v", err)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -347,6 +374,16 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	// successful request to ADD EVENT, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
 	return nil
+}
+
+// getTargetActorType builds the actor type string for a given appID and kind (workflow/activity)
+func (abe *Actors) getTargetActorType(appID, kind string) string {
+	ns := abe.namespace
+
+	if appID == "" {
+		appID = abe.appID
+	}
+	return fmt.Sprintf("%s%s.%s.%s", ActorTypePrefix, ns, appID, kind)
 }
 
 // CompleteActivityWorkItem implements backend.Backend
@@ -386,6 +423,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	return runtimeState, nil
 }
 
+// durabletask calls this func
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
 	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
@@ -443,6 +481,7 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
 func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+	// TODO determine if i need to do this cross app
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))
@@ -508,7 +547,7 @@ func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.Orch
 	log.Debug("Actor backend is waiting for a workflow actor to schedule an invocation.")
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:
-		log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
+		log.Debugf("Actor backend received a workflow task for workflow '%s'. This is for appID: %s\n", wi.InstanceID, abe.appID)
 		return wi, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()

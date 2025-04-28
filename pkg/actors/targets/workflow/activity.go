@@ -56,6 +56,7 @@ const (
 
 type activity struct {
 	appID             string
+	namespace         string
 	actorID           string
 	actorType         string
 	workflowActorType string
@@ -72,6 +73,7 @@ type activity struct {
 
 type ActivityOptions struct {
 	AppID              string
+	Namespace          string
 	ActivityActorType  string
 	WorkflowActorType  string
 	ReminderInterval   *time.Duration
@@ -110,6 +112,7 @@ func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory
 
 		return &activity{
 			appID:              opts.AppID,
+			namespace:          opts.Namespace,
 			actorID:            actorID,
 			actorType:          opts.ActivityActorType,
 			workflowActorType:  opts.WorkflowActorType,
@@ -149,32 +152,8 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		return nil, a.purgeActivityState(ctx)
 	}
 
-	// The actual execution is triggered by a reminder, but only if this activity is hosted locally
-	targetAppID := his.GetAppId()
-	var activityActorType string
-	var method string
-	if targetAppID != "" && targetAppID != a.appID {
-		if his.GetTaskScheduled() != nil {
-			// need to execute app2 activity on app2
-			// TODO: change this to the value received from durabletask, but for now this is ok
-			activityActorType = fmt.Sprintf("dapr.internal.default.%s.activity", a.appID)
-			method = "Execute"
-			log.Debugf("Activity actor '%s': executing activity '%s' with state: %+v\n", a.actorID, his.GetTaskScheduled().GetName(), &his)
-		} else if his.GetTaskCompleted() != nil || his.GetTaskFailed() != nil {
-			log.Debugf("Activity actor '%s': executing activity '%s' with state: %+v\n", a.actorID, his.GetTaskCompleted(), &his)
-			activityActorType = fmt.Sprintf("dapr.internal.default.%s.workflow", targetAppID)
-			method = "AddWorkflowEvent"
-		}
-		log.Debugf("cassie: activityActorType: %s && method: %s", activityActorType, method)
-		_, err := a.router.Call(ctx, internalsv1pb.
-			NewInternalInvokeRequest(method).
-			WithActor(activityActorType, a.actorID).
-			WithData(msg.GetData().GetValue()).
-			WithContentType(invokev1.ProtobufContentType),
-		)
-		return nil, err
-	}
-	// If local, create the reminder as usual
+	log.Debugf("[%s] activity actor invokeMethod: %v", a.appID, his)
+
 	return nil, a.createReliableReminder(ctx, &his)
 }
 
@@ -296,39 +275,13 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		return runCompletedTrue, err
 	}
 
-	//Cassie NOTE: HERE we execcute our activities, then need to send the result back to the parent workflow after accomplishing it, dont send to app1 to execute just send result back
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+		WithActor(a.workflowActorType, workflowID).
+		WithData(resultData).
+		WithContentType(invokev1.ProtobufContentType)
 
-	// Only send AddWorkflowEvent to orchestrator if the event is a completion (success or failure)
-	if wi.Result.GetTaskCompleted() != nil || wi.Result.GetTaskFailed() != nil {
-		// Determine the orchestrator's appID from the parent HistoryEvent
-		orchestratorAppID := ""
-		if taskEvent.GetAppId() != "" {
-			orchestratorAppID = taskEvent.GetAppId()
-		}
-		log.Debugf("cassie taskEvent: %+v\n", taskEvent)
-		log.Debugf("cassie orchestratorAppID: %+v\n", orchestratorAppID)
-		if orchestratorAppID == "" {
-			return runCompletedTrue, fmt.Errorf("cannot determine orchestrator appID for workflow with instanceId '%s'", wi.InstanceID)
-		}
-
-		workflowActorType := fmt.Sprintf("dapr.internal.default.%s.workflow", orchestratorAppID)
-		log.Infof("[CROSSAPP] Sending AddWorkflowEvent to workflow actor type: %s, workflowID: %s, orchestratorAppID: %s, event: %+v", workflowActorType, workflowID, orchestratorAppID, wi.Result)
-		req := internalsv1pb.
-			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-			WithActor(workflowActorType, workflowID).
-			WithData(resultData).
-			WithContentType(invokev1.ProtobufContentType)
-
-		_, err = a.router.Call(ctx, req)
-		if err != nil {
-			log.Errorf("[CROSSAPP] Failed to deliver AddWorkflowEvent to orchestrator: %v", err)
-		} else {
-			log.Infof("[CROSSAPP] Successfully delivered AddWorkflowEvent to orchestrator")
-		}
-	} else {
-		// TODO: look into other types here and ensure that is it
-	}
-
+	_, err = a.router.Call(ctx, req)
 	switch {
 	case err != nil:
 		// Returning recoverable error, record metrics
@@ -385,8 +338,16 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 		return err
 	}
 
+	actorType := a.actorType
+	if his.GetAppId() != "" && his.GetAppId() != a.appID {
+		targetAppID := his.GetAppId()
+		actorType = fmt.Sprintf("dapr.internal.%s.%s.activity", a.namespace, targetAppID)
+	}
+
+	log.Debugf("cassie creating activity reminder for actorType %s and actorID %s", actorType, a.actorID)
+
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
-		ActorType: a.actorType,
+		ActorType: actorType,
 		ActorID:   a.actorID,
 		DueTime:   "0s",
 		Name:      reminderName,

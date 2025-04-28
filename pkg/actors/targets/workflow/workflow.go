@@ -27,7 +27,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/kit/ptr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -62,6 +61,7 @@ type EventSink func(*backend.OrchestrationMetadata)
 
 type workflow struct {
 	appID             string
+	namespace         string
 	actorID           string
 	actorType         string
 	activityActorType string
@@ -90,6 +90,7 @@ type workflow struct {
 
 type WorkflowOptions struct {
 	AppID             string
+	Namespace         string
 	WorkflowActorType string
 	ActivityActorType string
 	ReminderInterval  *time.Duration
@@ -131,6 +132,7 @@ func WorkflowFactory(ctx context.Context, opts WorkflowOptions) (targets.Factory
 
 		w := &workflow{
 			appID:              opts.AppID,
+			namespace:          opts.Namespace,
 			actorID:            actorID,
 			actorType:          opts.WorkflowActorType,
 			activityActorType:  opts.ActivityActorType,
@@ -364,18 +366,18 @@ func (w *workflow) createIfCompleted(ctx context.Context, rs *backend.Orchestrat
 }
 
 func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
-	startEvent.AppId = ptr.Of(w.appID) //pick up our appID
 	state.AddToInbox(startEvent)
-	fmt.Printf("scheduleWorkflowStart state: %v\n", state)
-	fmt.Printf("scheduleWorkflowStart state.appid: %v\n", startEvent.GetAppId())
 	if err := w.saveInternalState(ctx, state); err != nil {
 		return err
 	}
 
+	log.Debugf("[%s] scheduleWorkflowStart: %v", w.appID, startEvent)
+
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if _, err := w.createReliableReminder(ctx, "start", nil, 0); err != nil {
+	log.Debugf("cassie is this right startEvent.GetExecutionStarted().GetOrchestrationInstance().GetInstanceId(): %+v", startEvent.GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
+	if _, err := w.createReliableReminder(ctx, "start", nil, 0, startEvent.GetAppId()); err != nil {
 		return err
 	}
 
@@ -428,8 +430,6 @@ func (w *workflow) purgeWorkflowState(ctx context.Context) error {
 
 func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
 	state, _, err := w.loadInternalState(ctx)
-	fmt.Printf("addWorkflowEvent state: %v\n", state)
-
 	if err != nil {
 		return err
 	}
@@ -445,11 +445,6 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	if err != nil {
 		return err
 	}
-	log.Debugf("[CROSSAPP] addWorkflowEvent received on appID: %s, actorID: %s, event: %+v", w.appID, w.actorID, e)
-	log.Debugf("addWorkflowEvent e: %+v\n", e)
-	log.Debugf("addWorkflowEvent e.appid: %+v\n", e.GetAppId())
-	log.Debugf("addWorkflowEvent e.type: %+v\n", e.EventType)
-
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", w.actorID)
 	state.AddToInbox(&e)
 
@@ -457,26 +452,14 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 		return err
 	}
 
-	var targetAppID string
-	if e.GetAppId() != "" {
-		targetAppID = e.GetAppId()
-	} else if e.GetTaskScheduled() != nil && e.GetTaskScheduled().GetAppId() != "" {
-		targetAppID = e.GetTaskScheduled().GetAppId()
-	}
+	log.Debugf("[%s] addWorkflowEvent: %v", w.appID, e)
 
-	if targetAppID != "" && targetAppID != w.appID {
-		// Forward the reminder creation to the correct, cross app
-		//workflowActorType := fmt.Sprintf("dapr.internal.default.%s.workflow", targetAppID)
-		workflowActorType := fmt.Sprintf("dapr.internal.default.%s.activity", targetAppID)
-		_, err := w.router.Call(ctx, internalsv1pb.
-			NewInternalInvokeRequest("CreateReminder").
-			WithActor(workflowActorType, w.actorID).
-			WithData(historyEventBytes).
-			WithContentType(invokev1.ProtobufContentType),
-		)
-		return err
+	// Use appID from the event, fallback to this workflow's appID if not set
+	targetAppID := e.GetAppId()
+	if targetAppID == "" {
+		targetAppID = w.appID
 	}
-	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0); err != nil {
+	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0, targetAppID); err != nil {
 		return err
 	}
 
@@ -669,7 +652,9 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				Generation: state.Generation,
 			}
 			log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", w.actorID, reminderPrefix)
-			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, delay); err != nil {
+			log.Debugf("[%s] runWorkflow: %v", w.appID, t)
+
+			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, delay, esHistoryEvent.GetAppId()); err != nil {
 				executionStatus = diag.StatusRecoverable
 				return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", w.actorID, err))
 			}
@@ -703,17 +688,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				return
 			}
 
-			// Set orchestrator's app ID on the parent HistoryEvent
-			e.AppId = &w.appID
-			// Set target app ID on the TaskScheduledEvent
-			if ts.GetAppId() == "" {
-				// If not already set, set to the configured target
-				ts.AppId = &w.appID
-			}
-
-			log.Debugf("cass event: %v", e)
-			log.Debugf("cass ts.GetAppId() (target app): %v", ts.GetAppId())
-
 			var eventData []byte
 			eventData, err = proto.Marshal(e)
 			if err != nil {
@@ -724,26 +698,26 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				return
 			}
 
-			fmt.Printf("Workflow actor '%s': invoking execute method on activity actor '%s' (originating wf appID: %s)\n", w.actorID, ts.GetName(), w.appID)
-			targetActorID := getActivityActorID(w.actorID, e.GetEventId(), state.Generation)
+			activityActorType := w.actorType
+			if e.GetAppId() != "" && e.GetAppId() != w.appID {
+				targetAppID := e.GetAppId()
+				activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", w.namespace, targetAppID)
+			}
+
+			// Durable Task convention: activity actor ID = workflowInstanceId::taskScheduledId::generation
+			workflowInstanceID := rs.GetInstanceId() // Always use orchestration instanceId
+			taskScheduledId := int32(0)
+			// TODO fix below
+			if ts := e.GetTaskScheduled(); ts != nil {
+				log.Debugf("cassie ts: %v", ts)
+				//taskScheduledId = ts.GetTaskId()
+			}
+			targetActorID := getActivityActorID(workflowInstanceID, taskScheduledId, state.Generation)
 
 			w.activityResultAwaited.Store(true)
 
-			// Determine the target app ID for the activity
-			targetAppID := ""
-			fmt.Printf("*******Workflow actor '%s': targetActorID: %s\n", w.actorID, targetActorID)
-			if ts.GetAppId() != "" && ts.GetAppId() != w.appID {
-				targetAppID = ts.GetAppId()
-			}
-			// Use the correct actor type for the activity (including appID)
-			activityActorType := w.activityActorType
-			if targetAppID != "" && targetAppID != w.appID {
-				//activityActorType = fmt.Sprintf("dapr.internal.default.%s.activity", targetAppID)
-				activityActorType = fmt.Sprintf("dapr.internal.default.%s.activity", targetAppID)
-			}
-			//log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s' (appID: %s)", w.actorID, targetActorID, targetAppID)
-			fmt.Printf("[%s]calling activity actorid=%s\n", w.appID, targetActorID)
-			fmt.Printf("[%s]calling activity actor type=%s\n", w.appID, activityActorType)
+			log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
+
 			_, eerr := w.router.Call(ctx, internalsv1pb.
 				NewInternalInvokeRequest("Execute").
 				WithActor(activityActorType, targetActorID).
@@ -799,7 +773,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 					}
 				}
 
-				log.Debugf("cassie doing a actor router call")
 				log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.GetTargetInstanceID())
 
 				_, eerr := w.router.Call(ctx, internalsv1pb.
@@ -942,7 +915,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	return nil
 }
 
-func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
+func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration, targetAppID string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -968,8 +941,15 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 		}
 	}
 
+	actorType := w.actorType
+	if targetAppID != "" && targetAppID != w.appID {
+		actorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", w.namespace, targetAppID)
+	}
+
+	log.Debugf("cassie creating wf reminder for actorType %s and actorID %s", actorType, w.actorID)
+
 	return reminderName, w.reminders.Create(ctx, &actorapi.CreateReminderRequest{
-		ActorType: w.actorType,
+		ActorType: actorType,
 		ActorID:   w.actorID,
 		Data:      adata,
 		DueTime:   delay.String(),
