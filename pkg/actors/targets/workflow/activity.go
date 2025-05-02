@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/kit/ptr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -153,7 +154,7 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	}
 
 	log.Debugf("[%s] activity actor invokeMethod: %v", a.appID, his)
-
+	log.Debugf("[%s] activity actor invokeMethod with history event target appid %s and orchestration app id %s", a.appID, his.GetAppID(), his.GetOrchestrationAppID())
 	return nil, a.createReliableReminder(ctx, &his)
 }
 
@@ -219,12 +220,16 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	}
 	workflowID := a.actorID[0:endIndex]
 
+	log.Debugf("cassie orchestration appid in execute activity is: %s", taskEvent.GetOrchestrationAppID())
+
 	wi := &backend.ActivityWorkItem{
-		SequenceNumber: int64(taskEvent.GetEventId()),
-		InstanceID:     api.InstanceID(workflowID),
-		NewEvent:       taskEvent,
-		Properties:     make(map[string]any),
+		SequenceNumber:    int64(taskEvent.GetEventId()),
+		InstanceID:        api.InstanceID(workflowID),
+		NewEvent:          taskEvent,
+		Properties:        make(map[string]any),
+		OrchestratorAppId: ptr.Of(taskEvent.GetOrchestrationAppID()),
 	}
+	log.Debugf("wi inside execute activity is: %+v", wi)
 
 	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
@@ -265,6 +270,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 			return runCompletedFalse, wferrors.NewRecoverable(errExecutionAborted) // AbandonActivityWorkItem was called
 		}
 	}
+
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
 	// publish the result back to the workflow actor as a new event to be processed
@@ -275,9 +281,17 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		return runCompletedTrue, err
 	}
 
+	// send completed event to orchestrator wf actor
+	var wfActorType string
+	wfActorType = a.workflowActorType
+	if taskEvent.GetOrchestrationAppID() != a.appID { // indicates cross app activity
+		wfActorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", a.namespace, taskEvent.GetOrchestrationAppID())
+	}
+
+	log.Debugf("[DAPR] wf actor type: %s but this a cross app wf completion event, so sending the completion back to this wf actor type: \n", a.workflowActorType, wfActorType)
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(a.workflowActorType, workflowID).
+		WithActor(wfActorType, workflowID). // DurableTask backend will now handle cross-app routing
 		WithData(resultData).
 		WithContentType(invokev1.ProtobufContentType)
 
@@ -339,12 +353,13 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 	}
 
 	actorType := a.actorType
-	if his.GetAppId() != "" && his.GetAppId() != a.appID {
-		targetAppID := his.GetAppId()
+
+	if his.GetAppID() != "" && his.GetAppID() != a.appID {
+		targetAppID := his.GetAppID()
 		actorType = fmt.Sprintf("dapr.internal.%s.%s.activity", a.namespace, targetAppID)
 	}
 
-	log.Debugf("cassie creating activity reminder for actorType %s and actorID %s", actorType, a.actorID)
+	log.Debugf("cassie creating activity reminder for actorType %s and actorID %s with this historyEvent: %+v", actorType, a.actorID, his)
 
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: actorType,

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/kit/ptr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -199,6 +200,7 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
+	log.Debugf("[DAPR] CreateOrchestrationInstance func - %s: creating new workflow execution with orchestration appid: %s]", e.OrchestrationAppID)
 	abe.lock.RLock()
 	ch := abe.registeredCh
 	abe.lock.RUnlock()
@@ -223,6 +225,10 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		opt(policy)
 	}
 
+	appID := abe.appID
+	e.OrchestrationAppID = ptr.Of(appID)
+
+	log.Debugf("[DAPR] HITHER: %s", e.GetOrchestrationAppID())
 	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
 		Policy:     policy,
 		StartEvent: e,
@@ -230,17 +236,14 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	if err != nil {
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
-	log.Debugf("CreateOrchestrationInstance sending event to workflow actor %s for event: %+v", abe.getTargetActorType(abe.appID, WorkflowNameLabelKey), e)
+	log.Debugf("[DAPR] CreateOrchestrationInstance sending event to workflow actor %s for event: %+v", abe.getTargetActorType(abe.appID, WorkflowNameLabelKey), e)
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
 	// Determine appID for cross/multi-app scenarios
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	// Use appID from event if present, else default is the current appID
-	appID := abe.appID
-	if e != nil && e.GetAppId() != "" {
-		appID = e.GetAppId()
-	}
+
 	actorType := abe.getTargetActorType(appID, WorkflowNameLabelKey)
 	log.Debugf("[multiapp] actorType resolved: %s (appID: %s)", actorType, appID)
 
@@ -313,8 +316,9 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
 func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
+	log.Warnf("[DAPR] %s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
+	// cross app here too CASSIEEEEEE
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
@@ -325,8 +329,10 @@ func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Activity
 // AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
 func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
+	log.Warnf("[DAPR] %s: aborting workflow execution", wi.InstanceID)
+	// cross app here too CASSIEEEEEE
 
+	// durable task waits for event (note)
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
 	// TODO: @joshvanl: remove
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
@@ -337,6 +343,8 @@ func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.Orc
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
 func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
+	log.Debugf("[DAPR] AddNewOrchestrationEvent func - %s: adding new event to workflow execution ::%d with orchestration appid: %s", id, e.GetEventId(), *e.OrchestrationAppID)
+
 	data, err := proto.Marshal(e)
 	if err != nil {
 		return err
@@ -344,8 +352,18 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	// Determine appID for cross/multi-app scenarios
-	log.Debugf("AddNewOrchestrationEvent sending event to workflow actor %s for event: %+v", abe.getTargetActorType(abe.appID, WorkflowNameLabelKey), e)
-	actorType := abe.getTargetActorType(abe.appID, WorkflowNameLabelKey)
+	// Determine the correct appID for the workflow actor (should be the orchestrator's appID)
+	appID := abe.appID
+	log.Debugf("[multiapp] AddNewOrchestrationEvent appID: %s with event: %+v", appID, e)
+	if e != nil {
+		// Prefer top-level AppId (should be set for all events in multi-app)
+		if e.GetAppID() != "" {
+			appID = e.GetAppID()
+		}
+	}
+
+	actorType := abe.getTargetActorType(appID, WorkflowNameLabelKey)
+	log.Debugf("[multiapp] AddNewOrchestrationEvent routing to actorType: %s (appID: %s) for event: %+v", actorType, appID, e)
 	if actorType == "" {
 		actorType = abe.workflowActorType
 	}
@@ -360,7 +378,7 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	if err != nil {
 		return err
 	}
-	// here
+
 	start := time.Now()
 	_, err = router.Call(ctx, req)
 	fmt.Printf("here0. err: %s\n", err)
@@ -387,14 +405,46 @@ func (abe *Actors) getTargetActorType(appID, kind string) string {
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	log.Debugf("[DAPR] CompleteActivityWorkItem func - %s: completing activity execution ::%d with orchestration appid: %s", wi.InstanceID, wi.NewEvent.GetEventId(), *wi.OrchestratorAppId)
+
+	var targetAppId string
+	if wi.Result.GetOrchestrationAppID() != abe.appID {
+		targetAppId = wi.Result.GetOrchestrationAppID()
+	}
+	fmt.Printf("CASSIE TODO : Route back to the originating orchestrator workflow actor here. target appid: %s && history event result: %+v\n", targetAppId, wi.Result)
+
+	data, err := proto.Marshal(wi.Result)
+	if err != nil {
+		return err
+	}
+
+	actorType := abe.getTargetActorType(targetAppId, WorkflowNameLabelKey)
+	log.Debugf("cassie in CompleteActivityWorkItem. actortype: %s", actorType)
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+		WithActor(actorType, string(wi.InstanceID)).
+		WithData(data).
+		WithContentType(invokev1.OctetStreamContentType)
+
+	router, err := abe.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+	// here
+	_, err = router.Call(ctx, req)
+	fmt.Printf("here2. err: %s\n", err)
+
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
+
 	return nil
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
 func (*Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+	// TODO : Likely route back to the originating orchestrator workflow actor here
+	log.Debugf("[DAPR] CompleteOrchestrationWorkItem func - %s: completing workflow execution with workItem: %+v", wi.InstanceID, wi)
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -425,8 +475,9 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 
 // durabletask calls this func
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
-	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+	log.Debugf("[DAPR] Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
+	// dont change this cassieeee
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
@@ -481,7 +532,7 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
 func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
-	// TODO determine if i need to do this cross app
+	// TODO determine if i need to do this cross app.... leave this
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))
@@ -544,10 +595,10 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 // NextOrchestrationWorkItem implements backend.Backend
 func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
 	// Wait for the workflow actor to signal us with some work to do
-	log.Debug("Actor backend is waiting for a workflow actor to schedule an invocation.")
+	log.Debug("[DAPR] Actor backend is waiting for a workflow actor to schedule an invocation.")
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:
-		log.Debugf("Actor backend received a workflow task for workflow '%s'. This is for appID: %s\n", wi.InstanceID, abe.appID)
+		log.Debugf("[DAPR] Actor backend received a workflow task for workflow '%s'. This is for appID: %s\n", wi.InstanceID, abe.appID)
 		return wi, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -557,11 +608,11 @@ func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.Orch
 // NextActivityWorkItem implements backend.Backend
 func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityWorkItem, error) {
 	// Wait for the activity actor to signal us with some work to do
-	log.Debug("Actor backend is waiting for an activity actor to schedule an invocation.")
+	log.Debug("[DAPR] Actor backend is waiting for an activity actor to schedule an invocation.")
 	select {
 	case wi := <-abe.activityWorkItemChan:
 		log.Debugf(
-			"Actor backend received a [%s#%d] activity task for workflow '%s'.",
+			"[DAPR] Actor backend received a [%s#%d] activity task for workflow '%s'.",
 			wi.NewEvent.GetTaskScheduled().GetName(),
 			wi.NewEvent.GetEventId(),
 			wi.InstanceID)

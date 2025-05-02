@@ -43,7 +43,8 @@ type oldcallactivity struct {
 
 func (c *oldcallactivity) Setup(t *testing.T) []framework.Option {
 	c.place = placement.New(t)
-	c.sched = scheduler.New(t)
+	c.sched = scheduler.New(t,
+		scheduler.WithLogLevel("debug"))
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithMetadata("busyTimeout", "10s"),
@@ -66,9 +67,7 @@ func (c *oldcallactivity) Setup(t *testing.T) []framework.Option {
 			return nil, fmt.Errorf("failed to get input in app2 activity: %w", err)
 		}
 		fmt.Printf("[DEBUG] app2 activity received input: %s\n", input)
-		result := fmt.Sprintf("[App2] Processed: %s", input)
-		fmt.Printf("[DEBUG] app2 activity returning: %s\n", result)
-		return result, nil
+		return fmt.Sprintf("Processed by app2: %s", input), nil
 	})
 
 	fmt.Println("[DEBUG] Registering orchestrator CrossAppWorkflow on app1's registry (Setup)")
@@ -83,6 +82,8 @@ func (c *oldcallactivity) Setup(t *testing.T) []framework.Option {
 		fmt.Println("[DEBUG] Orchestrator about to call activity on app2")
 		fmt.Println("[DEBUG] Calling ProcessData activity in app2")
 		app2ID := "app2"
+
+		ctx.AppID = "app1" // this is needed... is there another way??!
 		fmt.Printf("[DEBUG] Using app2 ID: %s\n", app2ID)
 		var output string
 		err := ctx.CallActivity("ProcessData",
@@ -142,6 +143,13 @@ func (c *oldcallactivity) Run(t *testing.T, ctx context.Context) {
 		fmt.Printf("[ERROR] WorkItemListener on app2 exited: %v\n", err)
 	}
 	fmt.Println("[DEBUG] Started WorkItemListener on app2")
+
+	// TODO: FIX THIS, we should not need a time sleep here, but I do
+	// Timing/Race Condition!!!
+	//The workflow or actor invocation is happening before placement has finished updating and distributing the tables to all Dapr sidecars.
+	// Even if placement logs the registration, there might be a short window before all Dapr sidecars receive the updated placement tables.
+	// think i need to wait for updates from placement before schedulenew orchestration
+	time.Sleep(5 * time.Second)
 
 	fmt.Println("[DEBUG] Starting the workflow")
 	id, err := client1.ScheduleNewOrchestration(ctx, "CrossAppWorkflow", api.WithInput("Hello from app1"))

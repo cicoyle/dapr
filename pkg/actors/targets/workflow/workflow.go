@@ -377,7 +377,7 @@ func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backen
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
 	log.Debugf("cassie is this right startEvent.GetExecutionStarted().GetOrchestrationInstance().GetInstanceId(): %+v", startEvent.GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
-	if _, err := w.createReliableReminder(ctx, "start", nil, 0, startEvent.GetAppId()); err != nil {
+	if _, err := w.createReliableReminder(ctx, "start", nil, 0, startEvent.GetAppID()); err != nil {
 		return err
 	}
 
@@ -455,11 +455,8 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	log.Debugf("[%s] addWorkflowEvent: %v", w.appID, e)
 
 	// Use appID from the event, fallback to this workflow's appID if not set
-	targetAppID := e.GetAppId()
-	if targetAppID == "" {
-		targetAppID = w.appID
-	}
-	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0, targetAppID); err != nil {
+	// DurableTask backend will now handle AddWorkflowEvent cross-app routing and reminders. No custom logic needed here.
+	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0, w.appID); err != nil {
 		return err
 	}
 
@@ -654,7 +651,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", w.actorID, reminderPrefix)
 			log.Debugf("[%s] runWorkflow: %v", w.appID, t)
 
-			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, delay, esHistoryEvent.GetAppId()); err != nil {
+			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, delay, esHistoryEvent.GetAppID()); err != nil {
 				executionStatus = diag.StatusRecoverable
 				return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", w.actorID, err))
 			}
@@ -699,8 +696,8 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			}
 
 			activityActorType := w.actorType
-			if e.GetAppId() != "" && e.GetAppId() != w.appID {
-				targetAppID := e.GetAppId()
+			if e.GetAppID() != "" && e.GetAppID() != w.appID {
+				targetAppID := e.GetAppID()
 				activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", w.namespace, targetAppID)
 			}
 
