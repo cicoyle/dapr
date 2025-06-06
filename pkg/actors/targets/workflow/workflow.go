@@ -514,6 +514,8 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	transactionalRequests := make(map[string][]actorapi.TransactionalOperation)
 	var esHistoryEvent *backend.HistoryEvent
 
+	// wire in source appID here
+
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
@@ -700,6 +702,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				targetAppID := e.GetAppID()
 				activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", w.namespace, targetAppID)
 			}
+			//*** cassie todoooo add task router with source appID here for app1
 
 			// Durable Task convention: activity actor ID = workflowInstanceId::taskScheduledId::generation
 			workflowInstanceID := rs.GetInstanceId() // Always use orchestration instanceId
@@ -715,6 +718,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 			log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
 
+			//w.appID // set source here
 			_, eerr := w.router.Call(ctx, internalsv1pb.
 				NewInternalInvokeRequest("Execute").
 				WithActor(activityActorType, targetActorID).
